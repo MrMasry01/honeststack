@@ -36,13 +36,15 @@ export default function Ideas() {
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
   const [formSuccess, setFormSuccess] = useState(false)
+  const [actioningId, setActioningId] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchIdeas()
   }, [filter])
 
-  async function fetchIdeas() {
-    setLoading(true)
+  async function fetchIdeas(silent = false) {
+    if (!silent) setLoading(true)
     let q = supabase
       .from('content_ideas')
       .select('id, hook, angle, status, language, time_bucket, script_segments, brief, urgency, created_at')
@@ -55,7 +57,22 @@ export default function Ideas() {
 
     const { data } = await q
     setIdeas((data as Idea[]) || [])
-    setLoading(false)
+    if (!silent) setLoading(false)
+  }
+
+  async function updateStatus(id: string, status: 'draft' | 'ready') {
+    setActioningId(id)
+    setActionError(null)
+    const { error } = await supabase
+      .from('content_ideas')
+      .update({ status })
+      .eq('id', id)
+    if (error) {
+      setActionError(error.message)
+    } else {
+      await fetchIdeas(true)
+    }
+    setActioningId(null)
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -273,6 +290,12 @@ export default function Ideas() {
         ))}
       </div>
 
+      {actionError && (
+        <div style={{ padding: '10px 14px', borderRadius: 8, backgroundColor: '#3a1a1a', color: '#f87171', fontSize: 13 }}>
+          {actionError}
+        </div>
+      )}
+
       {/* Ideas list */}
       {loading ? (
         <LoadingRows />
@@ -328,6 +351,38 @@ export default function Ideas() {
                       <UrgencyDots urgency={idea.urgency} />
                     </div>
                   </div>
+
+                  {idea.status === 'draft' && (
+                    <button
+                      onClick={() => updateStatus(idea.id, 'ready')}
+                      disabled={actioningId === idea.id}
+                      style={{
+                        padding: '8px 16px', borderRadius: 8, border: 'none',
+                        backgroundColor: C.gold, color: '#0E1B2C',
+                        cursor: actioningId === idea.id ? 'not-allowed' : 'pointer',
+                        fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
+                        opacity: actioningId === idea.id ? 0.6 : 1, alignSelf: 'center',
+                      }}
+                    >
+                      {actioningId === idea.id ? 'Approving...' : '✓ Approve'}
+                    </button>
+                  )}
+                  {idea.status === 'ready' && (
+                    <button
+                      onClick={() => updateStatus(idea.id, 'draft')}
+                      disabled={actioningId === idea.id}
+                      style={{
+                        padding: '7px 12px', borderRadius: 8,
+                        border: `1px solid ${C.navyBorder}`, backgroundColor: 'transparent',
+                        color: C.slate,
+                        cursor: actioningId === idea.id ? 'not-allowed' : 'pointer',
+                        fontSize: 12, whiteSpace: 'nowrap',
+                        opacity: actioningId === idea.id ? 0.6 : 1, alignSelf: 'center',
+                      }}
+                    >
+                      {actioningId === idea.id ? 'Reverting...' : 'Revert to draft'}
+                    </button>
+                  )}
                 </div>
               </Card>
             )
