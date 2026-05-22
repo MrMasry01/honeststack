@@ -1,0 +1,309 @@
+// ============================================================
+// HonestStack — editorial-brief edge function
+// ------------------------------------------------------------
+// The editorial routine, server-side. Triggered by pg_cron 4x/day
+// (30 5,11,17,23 UTC). Reads the last 24h of raw_sources, calls the
+// Claude API to write ONE colloquial-Egyptian-Arabic roundup, and
+// inserts a content_ideas draft for human review in the cockpit.
+//
+// Auth:  header `x-ingest-secret` must equal env INGEST_SECRET.
+// Env (auto-injected): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+// Env (secrets):       INGEST_SECRET, ANTHROPIC_API_KEY
+// Env (optional):      EDITORIAL_MODEL  (default: claude-opus-4-7)
+// ============================================================
+
+import { createClient } from "jsr:@supabase/supabase-js@2";
+
+const OWNER_ID = "e7564e43-6b02-4c40-9ecf-1c65fffafe9a";
+const JSON_HEADERS = { "Content-Type": "application/json" };
+const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+const DEFAULT_MODEL = "claude-opus-4-7";
+const BUCKETS = ["00-06", "06-12", "12-18", "18-24"];
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
+}
+
+// ---- current Cairo 6-hour time bucket (DST-aware) ----------
+function cairoBucket(): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Cairo",
+    hour: "numeric",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  if (hour < 6) return "00-06";
+  if (hour < 12) return "06-12";
+  if (hour < 18) return "12-18";
+  return "18-24";
+}
+
+// ---- editorial system prompt (the voice IS the product) ----
+const SYSTEM_PROMPT =
+  `You are the HonestStack editorial brain — scriptwriter for an automated engine that publishes short-form FIFA World Cup 2026 videos. Each video is a fast roundup hosted by a 2D Egyptian Pharaoh mascot speaking colloquial Egyptian Arabic.
+
+You are given the last 24 hours of scraped football news. Produce ONE roundup video for the requested 6-hour time window, as structured JSON.
+
+== THE ROUNDUP ==
+- A roundup = 5-6 stories, one segment per story, rapid-fire — a fast catch-up for fans who can't follow every detail.
+- Order stories hottest-first. An 18-24 (primetime) roundup leads with the single biggest story of the day.
+- Score each candidate story 0-100, keep the strongest 5-6, drop anything weak: tier-1 journalist + "official/confirmed/here we go" +25; big name (favourite nation, superstar, historic club) +20; drama (last-minute goal, red card, upset, shock exit, injury) +20; record / "first ever" +15; corroborated by >=2 independent tier-1 sources +10; broke in the last few hours +10.
+
+== THE VOICE (this is the product) ==
+The host talks like a young Egyptian football creator — Marwan Serry (إرزع), Mogzz / إياد المجي, Nso7y. Fast, funny, sharp. Not a reporter reading news — a mate who just saw something wild and grabbed you to react WITH you.
+
+- عامية مصرية شبابية only — ZERO فصحى. Never هذا / الذي / سوف / لقد / الآن / يعتبر, never a newspaper sentence. Egyptian numbers: تلاتة، اتنين، عشرة.
+- React, don't report: "تعالى نتفرّج", "خليني أوجعك بالرقم", "سيبك من اللي بتعمله".
+- Segment 1 = the biggest story; it MUST hook in the first ~1.5 seconds — a shocking number said twice, a "stop everything" line, or a question that pokes the viewer. Never open with setup or a greeting.
+- FLOW: the whole script is one breath. Every segment after the first opens with a connector handing off from the line before: «وكمان» · «بس استنى الجامد» · «وفي أخبار تانية» · «والأهم» · «وخليني أوجعك بالرقم» · «طب تعالى نفهم». Momentum only climbs.
+- Each segment: a quick mini-hook + the news + a one-line reaction, 1-3 short sentences, 6000-12000 ms.
+- The last segment ends on a divisive, reply-worthy question — "أنهي خبر فيهم صدمك أكتر؟" / "عايز رأيك إنت بالظبط، سيبهالي تحت". Never "اشتركوا في القناة".
+- Sharp wit, light roasting ("الدفاع كان بيرد على التليفون"). No profanity. No mocking nations, accents, religions, or appearances. No politics.
+- FACTS ONLY. Never invent a scoreline, stat, quote, date, or name — if the sources don't say it, the script doesn't. Hedge anything shaky with «الكلام اللي بيتقال إن...».
+
+Target voice (one roundup's segments — text / duration_ms):
+- «سيبك من أي حاجة بتعملها دلوقتي... البرازيل اتحطّ في شبكتها تلات أهداف. تلاتة! وإحنا لسه في أول البطولة.» / 7000
+- «وبس استنى الجامد — إسبانيا كسبت ألمانيا بهدف في الدقيقة 90، واللي سجّله واحد عندوش 19 سنة بس.» / 9000
+- «وخليني أوجعك بالرقم: ده أوحش أداء للمنتخب ده في كأس العالم من سنة 1934.» / 8000
+- «طب وإنت، أنهي خبر فيهم صدمك أكتر؟ سيبهالي تحت، أنا قاعد بقرا.» / 7000
+
+== VISUALS ==
+Every segment needs an image_prompt_or_url, specific to that exact story — never a generic footballer or stadium. Three forms:
+- person:<Full Name> — for a segment showing a real named person (player, manager). The renderer fetches a verified real photo. Use the full, correctly-spelled name, e.g. person:Phil Foden.
+- A real photo URL (starts with http) — if a contributing source has a copyright-safe image in its media_urls that fits.
+- Otherwise an English AI image prompt for a scene/concept (not a real person's face) — name the real club/nation and moment.
+
+== OUTPUT ==
+Return JSON only, matching the provided schema:
+- hook: the roundup's Arabic headline, e.g. «أهم ٥ أخبار من كأس العالم النهارده».
+- urgency: integer 1-5 — the lead story's urgency (5 = breaking this window, 3 = standard, 1-2 = evergreen).
+- script_segments: 5-7 objects {text, image_prompt_or_url, duration_ms}; one per story; duration_ms between 6000 and 12000; text is the colloquial Egyptian Arabic line.
+- brief: {summary_en, virality_score (lead story, 0-100), source_ids (every contributing raw_sources id, across all stories), verification ("verified" | "partial" | "unverified"), stories (one short English line per story, in air order), cta (the closing Arabic question)}.`;
+
+// ---- structured-output JSON schema -------------------------
+const ROUNDUP_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["hook", "urgency", "script_segments", "brief"],
+  properties: {
+    hook: { type: "string" },
+    urgency: { type: "integer" },
+    script_segments: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["text", "image_prompt_or_url", "duration_ms"],
+        properties: {
+          text: { type: "string" },
+          image_prompt_or_url: { type: "string" },
+          duration_ms: { type: "integer" },
+        },
+      },
+    },
+    brief: {
+      type: "object",
+      additionalProperties: false,
+      required: [
+        "summary_en",
+        "virality_score",
+        "source_ids",
+        "verification",
+        "stories",
+        "cta",
+      ],
+      properties: {
+        summary_en: { type: "string" },
+        virality_score: { type: "integer" },
+        source_ids: { type: "array", items: { type: "string" } },
+        verification: {
+          type: "string",
+          enum: ["verified", "partial", "unverified"],
+        },
+        stories: { type: "array", items: { type: "string" } },
+        cta: { type: "string" },
+      },
+    },
+  },
+};
+
+// ============================================================
+Deno.serve(async (req: Request) => {
+  if (req.method !== "POST") {
+    return jsonResponse({ ok: false, error: "method not allowed" }, 405);
+  }
+
+  // ---- 1. auth gate ----------------------------------------
+  const ingestSecret = Deno.env.get("INGEST_SECRET");
+  if (!ingestSecret) {
+    return jsonResponse({ ok: false, error: "INGEST_SECRET not configured" }, 500);
+  }
+  if (req.headers.get("x-ingest-secret") !== ingestSecret) {
+    return jsonResponse({ ok: false, error: "unauthorized" }, 401);
+  }
+
+  try {
+    // ---- 2. env --------------------------------------------
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const anthropicKey = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!supabaseUrl || !serviceKey) {
+      return jsonResponse(
+        { ok: false, error: "missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY" },
+        500,
+      );
+    }
+    if (!anthropicKey) {
+      return jsonResponse({ ok: false, error: "ANTHROPIC_API_KEY not configured" }, 500);
+    }
+    const model = Deno.env.get("EDITORIAL_MODEL") || DEFAULT_MODEL;
+
+    // ---- 3. resolve target bucket --------------------------
+    let bucket = cairoBucket();
+    try {
+      const body = await req.json();
+      if (body && typeof body.bucket === "string" && BUCKETS.includes(body.bucket)) {
+        bucket = body.bucket;
+      }
+    } catch (_) {
+      // empty / non-JSON body -> use the inferred Cairo bucket
+    }
+
+    const supabase = createClient(supabaseUrl, serviceKey);
+
+    // ---- 4. double-run guard -------------------------------
+    const fiveHoursAgo = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString();
+    const { data: existing, error: guardErr } = await supabase
+      .from("content_ideas")
+      .select("id")
+      .eq("owner_id", OWNER_ID)
+      .eq("time_bucket", bucket)
+      .gte("created_at", fiveHoursAgo)
+      .limit(1);
+    if (guardErr) throw new Error(`guard query: ${guardErr.message}`);
+    if (existing && existing.length > 0) {
+      return jsonResponse({ ok: true, skipped: "already_done", bucket });
+    }
+
+    // ---- 5. pull the last 24h of sources -------------------
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: sources, error: srcErr } = await supabase
+      .from("raw_sources")
+      .select("id, source_handle, author, content, media_urls, url, verified")
+      .eq("owner_id", OWNER_ID)
+      .gte("created_at", dayAgo)
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (srcErr) throw new Error(`raw_sources query: ${srcErr.message}`);
+    if (!sources || sources.length === 0) {
+      return jsonResponse({ ok: true, skipped: "no_sources", bucket });
+    }
+    const validIds = new Set(sources.map((s: { id: string }) => s.id));
+
+    // ---- 6. call the Claude API ----------------------------
+    const userMessage =
+      `Time bucket: ${bucket}` +
+      (bucket === "18-24" ? " (primetime — lead with the single biggest story of the day)." : ".") +
+      `\n\nThe last 24 hours of scraped football news (JSON). Reference each item's "id" in brief.source_ids:\n\n` +
+      JSON.stringify(sources) +
+      `\n\nProduce ONE roundup video for this window now. Return only the structured JSON.`;
+
+    const apiResp = await fetch(ANTHROPIC_URL, {
+      method: "POST",
+      headers: {
+        "x-api-key": anthropicKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 16000,
+        thinking: { type: "adaptive" },
+        output_config: {
+          effort: "high",
+          format: { type: "json_schema", schema: ROUNDUP_SCHEMA },
+        },
+        system: SYSTEM_PROMPT,
+        messages: [{ role: "user", content: userMessage }],
+      }),
+      signal: AbortSignal.timeout(150_000),
+    });
+
+    const apiJson = await apiResp.json();
+    if (!apiResp.ok) {
+      throw new Error(`Anthropic API ${apiResp.status}: ${JSON.stringify(apiJson)}`);
+    }
+    if (apiJson.stop_reason === "max_tokens") {
+      throw new Error("Claude response truncated (max_tokens) — output incomplete");
+    }
+    if (apiJson.stop_reason === "refusal") {
+      throw new Error("Claude refused the request");
+    }
+
+    // ---- 7. parse the roundup ------------------------------
+    const textBlock = (apiJson.content ?? []).find(
+      (b: { type: string }) => b.type === "text",
+    );
+    if (!textBlock || typeof textBlock.text !== "string") {
+      throw new Error("no text block in Claude response");
+    }
+    let roundup: {
+      hook: string;
+      urgency: number;
+      script_segments: unknown[];
+      brief: { source_ids?: string[] } & Record<string, unknown>;
+    };
+    try {
+      roundup = JSON.parse(textBlock.text);
+    } catch (_) {
+      throw new Error("Claude response was not valid JSON");
+    }
+    if (!Array.isArray(roundup.script_segments) || roundup.script_segments.length === 0) {
+      throw new Error("roundup has no script_segments");
+    }
+
+    // ---- 8. resolve the lead source (must be a real id) ----
+    const sourceIds = Array.isArray(roundup.brief?.source_ids)
+      ? roundup.brief.source_ids
+      : [];
+    const leadSourceId = sourceIds.find((id) => validIds.has(id)) ?? null;
+    const urgency = Math.min(5, Math.max(1, Math.round(Number(roundup.urgency) || 3)));
+
+    // ---- 9. insert the draft -------------------------------
+    const { data: inserted, error: insErr } = await supabase
+      .from("content_ideas")
+      .insert({
+        owner_id: OWNER_ID,
+        source_id: leadSourceId,
+        hook: roundup.hook,
+        angle: "World Cup roundup",
+        format: "short_video",
+        platforms: ["instagram", "youtube", "tiktok"],
+        urgency,
+        status: "draft",
+        language: "ar-EG",
+        time_bucket: bucket,
+        script_segments: roundup.script_segments,
+        brief: roundup.brief,
+      })
+      .select("id")
+      .single();
+    if (insErr) throw new Error(`content_ideas insert: ${insErr.message}`);
+
+    return jsonResponse({
+      ok: true,
+      bucket,
+      model,
+      idea_id: inserted?.id ?? null,
+      hook: roundup.hook,
+      segments: roundup.script_segments.length,
+      sources_considered: sources.length,
+    });
+  } catch (err) {
+    console.error("editorial-brief error:", err);
+    return jsonResponse(
+      { ok: false, error: err instanceof Error ? err.message : String(err) },
+      500,
+    );
+  }
+});
