@@ -1,0 +1,14 @@
+{
+  "eval_id": 1,
+  "eval_name": "polish",
+  "prompt": "this draft script reads really badly — can you polish it? it's in fixtures/polish-input-idea.json. supabase is offline rn so just save the tightened script_segments to polished-script.json and walk me through what you changed segment by segment.",
+  "assertions": [
+    "polished-script.json exists and parses as a JSON array of 3-5 segment objects.",
+    "Every polished segment's duration_ms is between 6000 and 12000 (the input's 14000/13000/4000 violations are fixed).",
+    "No polished segment text contains MSA markers (هذا/هذه/الذي/التي/سوف/لقد/الآن/يعتبر/نتحدث).",
+    "Segment 1 opens with a real hook (the news / a surprising element), not the generic 'في هذا الفيديو' intro.",
+    "The final segment is a specific comment-bait question (ends with ؟), not a generic 'subscribe / اشتركوا / زر الجرس' sign-off.",
+    "Every segment's text is in Arabic script.",
+    "The core facts are preserved (Spain beat Germany; a 19-year-old scored the late winner)."
+  ]
+}

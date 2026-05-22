@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HonestStack — Brand Direction</title>
+<style>
+  :root{
+    --red:#E63329; --gold:#F4B61A; --ink:#161311; --sand:#FBF3E4;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--ink);color:var(--sand);
+    font-family:"Segoe UI",system-ui,sans-serif;padding:48px 24px;line-height:1.5}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:42px;font-weight:900;letter-spacing:-1px}
+  h1 .dot{color:var(--gold)}
+  .sub{color:#b9b0a2;margin:8px 0 40px;font-size:17px}
+  h2{font-size:13px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);
+    margin:48px 0 18px;border-bottom:1px solid #3a342d;padding-bottom:8px}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:20px}
+  .card{background:#211c18;border:1px solid #3a342d;border-radius:16px;overflow:hidden}
+  .card.rec{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
+  .card img{width:100%;display:block;background:#fff}
+  .card .body{padding:16px 18px}
+  .card .name{font-weight:800;font-size:18px;display:flex;justify-content:space-between;align-items:center}
+  .tag{background:var(--gold);color:var(--ink);font-size:11px;font-weight:800;
+    padding:3px 9px;border-radius:999px;letter-spacing:.5px}
+  .card .note{color:#b9b0a2;font-size:14px;margin-top:7px}
+  .pal{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .sw{border-radius:12px;overflow:hidden;border:1px solid #3a342d}
+  .sw .chip{height:90px}
+  .sw .meta{padding:10px 12px;background:#211c18;font-size:13px}
+  .sw .meta b{display:block;font-size:14px}
+  .sw .meta code{color:#b9b0a2;font-size:12px}
+  .type{display:flex;flex-direction:column;gap:14px}
+  .type .row{background:#211c18;border:1px solid #3a342d;border-radius:12px;padding:16px 18px}
+  .type .row .lbl{font-size:12px;color:var(--gold);letter-spacing:1px;text-transform:uppercase}
+  .type .row .demo{font-size:30px;font-weight:900;margin-top:4px}
+  .foot{margin-top:48px;color:#7d756a;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>HonestStack <span class="dot">— Brand Direction</span></h1>
+  <p class="sub">Four logo concepts + the proposed colour &amp; type system. Egyptian comedy · football · young-creator energy.</p>
+
+  <h2>Logo concepts</h2>
+  <div class="grid">
+    <div class="card">
+      <img src="logos/concept-1-wordmark.png" alt="Concept 1 — Wordmark">
+      <div class="body">
+        <div class="name">1 · Wordmark</div>
+        <div class="note">Bold italic wordmark with a verified-stamp tick — nods to "honest = verified." Sporty motion, but the gradient feels dated; would refine to flat colour.</div>
+      </div>
+    </div>
+    <div class="card">
+      <img src="logos/concept-2-emblem.png" alt="Concept 2 — Emblem">
+      <div class="body">
+        <div class="name">2 · Emblem</div>
+        <div class="note">Ornate football-crest badge. Heritage energy, but reads traditional and serious — not comedy. (AI also slipped the word "EMBLEM" in.) Not recommended.</div>
+      </div>
+    </div>
+    <div class="card rec">
+      <img src="logos/concept-3-playful.png" alt="Concept 3 — Pop-art">
+      <div class="body">
+        <div class="name">3 · Pop-art <span class="tag">RECOMMENDED</span></div>
+        <div class="note">Comic-book pop: a literal stack, lightning + exclamation, halftone, bold outlines. The most on-brief — loud, funny, energetic. My pick for the logo.</div>
+      </div>
+    </div>
+    <div class="card rec">
+      <img src="logos/concept-4-mascot.png" alt="Concept 4 — Mascot">
+      <div class="body">
+        <div class="name">4 · Pharaoh mascot <span class="tag">RECOMMENDED</span></div>
+        <div class="note">A pharaoh in a football kit — winking, thumbs up. A genuinely strong, memorable brand character. The wordmark under it is weak, but the mascot itself is gold.</div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Proposed palette</h2>
+  <div class="pal">
+    <div class="sw"><div class="chip" style="background:#E63329"></div><div class="meta"><b>Masry Red</b><code>#E63329</code></div></div>
+    <div class="sw"><div class="chip" style="background:#F4B61A"></div><div class="meta"><b>Pharaoh Gold</b><code>#F4B61A</code></div></div>
+    <div class="sw"><div class="chip" style="background:#161311"></div><div class="meta"><b>Ink</b><code>#161311</code></div></div>
+    <div class="sw"><div class="chip" style="background:#FBF3E4;border-bottom:1px solid #3a342d"></div><div class="meta"><b>Sand</b><code>#FBF3E4</code></div></div>
+  </div>
+
+  <h2>Proposed type</h2>
+  <div class="type">
+    <div class="row"><div class="lbl">Latin display — Anton</div><div class="demo">HONESTSTACK — WORLD CUP, NO BS</div></div>
+    <div class="row"><div class="lbl">Arabic display — Lalezar</div><div class="demo" dir="rtl">عاجل · كأس العالم بنكهة مصرية</div></div>
+    <div class="row"><div class="lbl">Arabic captions — Cairo</div><div class="demo" dir="rtl">الكلام اللي محدش هيقولهولك غير هنا</div></div>
+  </div>
+
+  <p class="foot">My recommendation: Concept 3 as the logo, with the Concept 4 pharaoh refined into a brand mascot for socials/thumbnails. Tell me your pick and I'll refine the chosen direction and lock the brand.</p>
+</div>
+</body>
+</html>

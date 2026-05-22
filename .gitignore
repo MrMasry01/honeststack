@@ -1,0 +1,35 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+build/
+out/
+.vite/
+
+# env & secrets
+.env
+.env.*
+
+# python
+__pycache__/
+*.pyc
+
+# logs & temp files
+*.log
+_hs_*.sql
+*.tmp
+
+# debug / scratch artifacts
+/_*
+/dbg-*
+/poll-*.json
+/rw-*.json
+*.db
+*.mp4
+
+# os / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

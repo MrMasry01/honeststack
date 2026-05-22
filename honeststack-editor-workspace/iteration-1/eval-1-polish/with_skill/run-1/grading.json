@@ -1,0 +1,13 @@
+{
+  "expectations": [
+    {"text": "polished-script.json exists and parses as a JSON array of 3-5 segment objects.", "passed": true, "evidence": "Valid JSON array of 4 segment objects, each with text/image_prompt_or_url/duration_ms."},
+    {"text": "Every polished segment's duration_ms is between 6000 and 12000 (the input's 14000/13000/4000 violations are fixed).", "passed": true, "evidence": "Durations 7000/11000/9000/7000 — all within 6000-12000. The 14000, 13000 and 4000 violations are all corrected."},
+    {"text": "No polished segment text contains MSA markers (هذا/هذه/الذي/التي/سوف/لقد/الآن/يعتبر/نتحدث).", "passed": true, "evidence": "Zero MSA markers. Consistently colloquial: 'بيخلّع','خد الكورة','إيد فاضية','تتجبّل','بصراحة كده','لقديه'."},
+    {"text": "Segment 1 opens with a real hook (the news / a surprising element), not the generic 'في هذا الفيديو' intro.", "passed": true, "evidence": "Segment 1: 'الدقيقة 90... وولد عنده 19 سنة بيخلّع شباك ألمانيا!' — opens mid-action with the surprising fact."},
+    {"text": "The final segment is a specific comment-bait question (ends with ؟), not a generic 'subscribe / اشتراك / زر الجرس' sign-off.", "passed": true, "evidence": "Final segment: 'إسبانيا هتوصل لقديه في البطولة دي؟ قولّي رأيك في الكومنتات.' — a specific question; the banned subscribe CTA is removed."},
+    {"text": "Every segment's text is in Arabic script.", "passed": true, "evidence": "All 4 segments are Arabic."},
+    {"text": "The core facts are preserved (Spain beat Germany; a 19-year-old scored the late winner).", "passed": true, "evidence": "Both facts preserved. No fabricated facts added — the scoreline is left unstated rather than invented, consistent with the skill's facts-only rule."}
+  ],
+  "summary": {"passed": 7, "failed": 0, "total": 7, "pass_rate": 1.0},
+  "timing": {"total_tokens": 33185, "total_duration_seconds": 207.4}
+}

@@ -1,0 +1,17 @@
+{
+  "eval_id": 0,
+  "eval_name": "morning-brief",
+  "prompt": "morning brief time — supabase mcp isn't hooked up yet so use the dump in fixtures/morning-brief-raw-sources.json as the last 24h of raw_sources. my owner_id is 00000000-0000-0000-0000-000000000001. dedupe it, cluster it, score it, write me the day's video scripts in masry (egyptian arabic), and save the content_ideas rows you'd insert to a JSON file called content_ideas.json so i can eyeball them. then show me a summary table.",
+  "assertions": [
+    "content_ideas.json exists and parses as a JSON array of 3-4 video ideas (the weak 'wi-fi / gate times' story excluded).",
+    "Dedup worked: exactly one idea covers the Brazil 3-0 Morocco story despite the source dump containing a duplicated Ornstein row.",
+    "No idea is built from the low-value 'stadium wi-fi / gate times' source item.",
+    "Every idea has status='draft', language='ar-EG', and format='short_video'.",
+    "Every idea has a distinct time_bucket, each one of '00-06','06-12','12-18','18-24'.",
+    "Every script_segments array has 3-5 segments, and every segment duration_ms is between 6000 and 12000.",
+    "Every script segment's text is written in Arabic script.",
+    "Each script's final segment ends with a question mark (؟ or ?) as a comment-bait CTA.",
+    "The most viral story — the Brazil 3-0 upset (3 tier-1 sources + a historic stat) — is assigned the '18-24' primetime bucket.",
+    "Script text is colloquial Egyptian Arabic, free of MSA markers (هذا/الذي/سوف/لقد/الآن)."
+  ]
+}

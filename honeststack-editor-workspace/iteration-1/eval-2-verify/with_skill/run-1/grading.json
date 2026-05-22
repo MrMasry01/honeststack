@@ -1,0 +1,12 @@
+{
+  "expectations": [
+    {"text": "verification.json exists and parses as JSON with a boolean 'verified' and an array 'verification_sources'.", "passed": true, "evidence": "Valid JSON: verified (boolean) and verification_sources (array) both present, plus source_id and notes."},
+    {"text": "verified is true (the claim — 2026 World Cup final at MetLife Stadium on 19 July 2026 — is factually correct).", "passed": true, "evidence": "verified=true; the claim is factually correct."},
+    {"text": "verification_sources contains at least 2 URLs.", "passed": true, "evidence": "4 URLs supplied."},
+    {"text": "The verification_sources are distinct URLs, and none is the original twitter.com/WorldCupBuzz source.", "passed": true, "evidence": "4 distinct URLs; none is the original twitter source."},
+    {"text": "The cited sources are independent and reputable (e.g. FIFA, BBC, ESPN, Reuters, AP, major outlets).", "passed": true, "evidence": "Sources: FIFA.com (official), MetLife Stadium official event page, Wikipedia (x2). FIFA + venue official site are independent and authoritative."},
+    {"text": "response.md explains the cross-check — what claim was checked and against which sources.", "passed": true, "evidence": "response.md and notes break the claim into 3 sub-claims and cite which sources confirm each; includes a copyright/media reuse note."}
+  ],
+  "summary": {"passed": 6, "failed": 0, "total": 6, "pass_rate": 1.0},
+  "timing": {"total_tokens": 28955, "total_duration_seconds": 212.8}
+}

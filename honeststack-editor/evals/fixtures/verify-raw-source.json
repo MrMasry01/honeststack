@@ -1,0 +1,15 @@
+{
+  "id": "22222222-2222-2222-2222-222222222222",
+  "owner_id": "00000000-0000-0000-0000-000000000001",
+  "source_type": "twitter",
+  "source_handle": "WorldCupBuzz",
+  "external_id": "tw_9988770",
+  "url": "https://twitter.com/WorldCupBuzz/status/9988770",
+  "author": "World Cup Buzz",
+  "content": "The 2026 FIFA World Cup final will be played at MetLife Stadium in New Jersey on Sunday, July 19, 2026. The tournament is co-hosted by the United States, Canada and Mexico and features 48 teams for the first time.",
+  "media_urls": [],
+  "dedup_hash": "h_metlife_final_2026",
+  "verified": false,
+  "verification_sources": null,
+  "created_at": "2026-05-20T10:00:00Z"
+}

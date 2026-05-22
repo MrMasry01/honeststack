@@ -1,0 +1,17 @@
+{
+  "expectations": [
+    {"text": "content_ideas.json exists and parses as a JSON array of 3-4 video ideas (the weak 'wi-fi / gate times' story excluded).", "passed": true, "evidence": "Valid JSON array of 4 idea objects; wi-fi/logistics source not used (agent reported it dropped as low-value)."},
+    {"text": "Dedup worked: exactly one idea covers the Brazil 3-0 Morocco story despite the source dump containing a duplicated Ornstein row.", "passed": true, "evidence": "Exactly one Brazil idea (source_id a1...001); agent reported the duplicate Ornstein tweet removed."},
+    {"text": "No idea is built from the low-value 'stadium wi-fi / gate times' source item.", "passed": true, "evidence": "No wi-fi idea present."},
+    {"text": "Every idea has status='draft', language='ar-EG', and format='short_video'.", "passed": true, "evidence": "All 4 ideas: status='draft', language='ar-EG', format='short_video'."},
+    {"text": "Every idea has a distinct time_bucket, each one of '00-06','06-12','12-18','18-24'.", "passed": true, "evidence": "Buckets: 00-06, 06-12, 12-18, 18-24 — all distinct and valid."},
+    {"text": "Every script_segments array has 3-5 segments, and every segment duration_ms is between 6000 and 12000.", "passed": true, "evidence": "All 4 ideas have 4 segments; durations in {6000,7000,8000,9000} — within range."},
+    {"text": "Every script segment's text is written in Arabic script.", "passed": true, "evidence": "All segment text is Arabic."},
+    {"text": "Each script's final segment ends with a question mark (؟ or ?) as a comment-bait CTA.", "passed": true, "evidence": "All 4 closing segments pose a question and request comments."},
+    {"text": "The most viral story — the Brazil 3-0 upset — is assigned the '18-24' primetime bucket.", "passed": true, "evidence": "Brazil 0-3 Morocco (virality 88) assigned time_bucket '18-24'."},
+    {"text": "Script text is colloquial Egyptian Arabic, free of MSA markers (هذا/الذي/سوف/لقد/الآن).", "passed": true, "evidence": "No MSA markers; consistently colloquial."}
+  ],
+  "summary": {"passed": 10, "failed": 0, "total": 10, "pass_rate": 1.0},
+  "timing": {"total_tokens": 36801, "total_duration_seconds": 269.2},
+  "notes": ["Quality gaps not covered by assertions: fabricated 'id' and 'created_at' fields (these are DB-generated and should not appear in an insert payload); brief.verification set to 'partial' which is inaccurate (no verification was performed, so 'unverified' is correct). The with_skill run got both of these right."]
+}

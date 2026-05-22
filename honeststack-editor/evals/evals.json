@@ -1,0 +1,56 @@
+{
+  "skill_name": "honeststack-editor",
+  "notes": "honeststack-editor normally reads/writes Supabase via MCP. The MCP is not connected, so each eval supplies the relevant rows as a JSON fixture and asks for the would-be writes back as JSON. This exercises the editorial logic (clustering, scoring, Egyptian-Arabic writing, verification) without a live DB.",
+  "evals": [
+    {
+      "id": 0,
+      "name": "morning-brief",
+      "prompt": "morning brief time — supabase mcp isn't hooked up yet so use the dump in fixtures/morning-brief-raw-sources.json as the last 24h of raw_sources. my owner_id is 00000000-0000-0000-0000-000000000001. dedupe it, cluster it, score it, write me the day's video scripts in masry (egyptian arabic), and save the content_ideas rows you'd insert to a JSON file called content_ideas.json so i can eyeball them. then show me a summary table.",
+      "expected_output": "A content_ideas.json file with one row per chosen story (up to 4, weakest story dropped). Each row: status='draft', language='ar-EG', format='short_video', a distinct time_bucket, an Egyptian-Arabic hook, a script_segments array of 3-5 segments (each duration_ms 6000-12000, text in colloquial Egyptian Arabic, last segment a question), and a brief jsonb. Exact-duplicate rows deduped. A summary table in the reply.",
+      "files": ["evals/fixtures/morning-brief-raw-sources.json"],
+      "expectations": [
+        "content_ideas.json exists and parses as a JSON array of 3-4 video ideas (the weak 'wi-fi / gate times' story excluded).",
+        "Dedup worked: exactly one idea covers the Brazil 3-0 Morocco story despite the source dump containing a duplicated Ornstein row.",
+        "No idea is built from the low-value 'stadium wi-fi / gate times' source item.",
+        "Every idea has status='draft', language='ar-EG', and format='short_video'.",
+        "Every idea has a distinct time_bucket, each one of '00-06','06-12','12-18','18-24'.",
+        "Every script_segments array has 3-5 segments, and every segment duration_ms is between 6000 and 12000.",
+        "Every script segment's text is written in Arabic script.",
+        "Each script's final segment ends with a question mark (؟ or ?) as a comment-bait CTA.",
+        "The most viral story — the Brazil 3-0 upset (3 tier-1 sources + a historic stat) — is assigned the '18-24' primetime bucket.",
+        "Script text is colloquial Egyptian Arabic, free of MSA markers (هذا/الذي/سوف/لقد/الآن)."
+      ]
+    },
+    {
+      "id": 1,
+      "name": "polish",
+      "prompt": "this draft script reads really badly — can you polish it? it's in fixtures/polish-input-idea.json. supabase is offline rn so just save the tightened script_segments to polished-script.json and walk me through what you changed segment by segment.",
+      "expected_output": "A polished-script.json with a rewritten script_segments array: colloquial Egyptian Arabic (no MSA/fusha), a sharp hook in segment 1, every segment 6000-12000 ms, a specific comment-bait question to close (no generic 'subscribe' CTA). A clear before/after walkthrough per segment in the reply.",
+      "files": ["evals/fixtures/polish-input-idea.json"],
+      "expectations": [
+        "polished-script.json exists and parses as a JSON array of 3-5 segment objects.",
+        "Every polished segment's duration_ms is between 6000 and 12000 (the input's 14000/13000/4000 violations are fixed).",
+        "No polished segment text contains MSA markers (هذا/هذه/الذي/التي/سوف/لقد/الآن/يعتبر/نتحدث).",
+        "Segment 1 opens with a real hook (the news / a surprising element), not the generic 'في هذا الفيديو' intro.",
+        "The final segment is a specific comment-bait question (ends with ؟), not a generic 'subscribe / اشتركوا / زر الجرس' sign-off.",
+        "Every segment's text is in Arabic script.",
+        "The core facts are preserved (Spain beat Germany; a 19-year-old scored the late winner)."
+      ]
+    },
+    {
+      "id": 2,
+      "name": "verify",
+      "prompt": "before i let this into a video — verify the claim in fixtures/verify-raw-source.json. cross-check it properly against independent sources. supabase mcp is down so don't try to write, just tell me verified true or false and give me the verification_sources array you'd put on the row.",
+      "expected_output": "A verdict (verified true/false) based on cross-checking against >=2 independent reputable sources via web search. For this true claim (2026 WC final at MetLife Stadium, 19 July 2026), expect verified=true with a verification_sources array of >=2 distinct independent URLs, none of which is the original twitter source.",
+      "files": ["evals/fixtures/verify-raw-source.json"],
+      "expectations": [
+        "verification.json exists and parses as JSON with a boolean 'verified' and an array 'verification_sources'.",
+        "verified is true (the claim — 2026 World Cup final at MetLife Stadium on 19 July 2026 — is factually correct).",
+        "verification_sources contains at least 2 URLs.",
+        "The verification_sources are distinct URLs, and none is the original twitter.com/WorldCupBuzz source.",
+        "The cited sources are independent and reputable (e.g. FIFA, BBC, ESPN, Reuters, AP, major outlets).",
+        "response.md explains the cross-check — what claim was checked and against which sources."
+      ]
+    }
+  ]
+}

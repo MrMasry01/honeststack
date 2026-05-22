@@ -1,0 +1,36 @@
+{
+  "host_voice_url": "https://example.com/placeholder-host-voice.mp3",
+  "segments": [
+    {
+      "text_ar": "مصر وكأس العالم 2026! الفراعنة جاهزين يرجعوا تاني للمسرح الكبير بعد غياب طويل.",
+      "visual_url": "https://images.pexels.com/photos/46798/the-ball-stadion-football-the-pitch-46798.jpeg",
+      "duration_ms": 9000,
+      "ken_burns": { "from": 1.0, "to": 1.12 }
+    },
+    {
+      "text_ar": "الكابتن محمد صلاح قائد المنتخب — والجماهير بتحلم برؤيته يرفع الكأس في الملعب الأمريكي!",
+      "visual_url": "https://images.pexels.com/photos/1884574/pexels-photo-1884574.jpeg",
+      "duration_ms": 10000,
+      "ken_burns": { "from": 1.05, "to": 0.95 }
+    },
+    {
+      "text_ar": "المجموعات اتحددت — مصر في مجموعة نارية مع البرازيل وإسبانيا. التحدي صعب بس مش مستحيل!",
+      "visual_url": "https://images.pexels.com/photos/274506/pexels-photo-274506.jpeg",
+      "duration_ms": 8000,
+      "ken_burns": { "from": 1.0, "to": 1.18 }
+    },
+    {
+      "text_ar": "المونديال هيُلعب في أمريكا والمكسيك وكندا — وتذاكر الجماهير المصرية اتباعت في دقايق!",
+      "visual_url": "https://images.pexels.com/photos/2263436/pexels-photo-2263436.jpeg",
+      "duration_ms": 7000,
+      "ken_burns": { "from": 1.08, "to": 1.0 }
+    }
+  ],
+  "brand": {
+    "primary": "#0A0A0A",
+    "accent": "#D4AF37",
+    "logo_url": "https://example.com/honeststack-logo.png"
+  },
+  "intro_text": "أخبار كأس العالم 2026",
+  "outro_handle": "@HonestStack"
+}

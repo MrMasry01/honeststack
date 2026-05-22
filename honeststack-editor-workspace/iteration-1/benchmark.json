@@ -1,0 +1,417 @@
+{
+  "metadata": {
+    "skill_name": "honeststack-editor",
+    "skill_path": "C:\\Users\\maro2\\honeststack-worldcup\\honeststack-editor",
+    "executor_model": "claude-sonnet-4-6",
+    "analyzer_model": "claude-opus-4-7",
+    "timestamp": "2026-05-21T09:07:45Z",
+    "evals_run": [
+      0,
+      1,
+      2
+    ],
+    "runs_per_configuration": 1
+  },
+  "runs": [
+    {
+      "eval_id": 0,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 10,
+        "failed": 0,
+        "total": 10,
+        "time_seconds": 304.7,
+        "tokens": 41576,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "content_ideas.json exists and parses as a JSON array of 3-4 video ideas (the weak 'wi-fi / gate times' story excluded).",
+          "passed": true,
+          "evidence": "Valid JSON array of 4 idea objects. The wi-fi/logistics source (a1...011) is not used."
+        },
+        {
+          "text": "Dedup worked: exactly one idea covers the Brazil 3-0 Morocco story despite the source dump containing a duplicated Ornstein row.",
+          "passed": true,
+          "evidence": "Exactly one Brazil idea (source_id a1...001); brief.source_ids lists the 3 distinct Brazil rows, the duplicated Ornstein row (a1...004) is correctly not double-counted."
+        },
+        {
+          "text": "No idea is built from the low-value 'stadium wi-fi / gate times' source item.",
+          "passed": true,
+          "evidence": "response.md logs the wi-fi item as scored ~5 and discarded below the threshold."
+        },
+        {
+          "text": "Every idea has status='draft', language='ar-EG', and format='short_video'.",
+          "passed": true,
+          "evidence": "All 4 ideas: status='draft', language='ar-EG', format='short_video'."
+        },
+        {
+          "text": "Every idea has a distinct time_bucket, each one of '00-06','06-12','12-18','18-24'.",
+          "passed": true,
+          "evidence": "Buckets: 18-24, 12-18, 06-12, 00-06 — all four distinct and valid."
+        },
+        {
+          "text": "Every script_segments array has 3-5 segments, and every segment duration_ms is between 6000 and 12000.",
+          "passed": true,
+          "evidence": "Segment counts 5/4/4/4; all durations in {7000,8000,9000,10000,11000} — within range."
+        },
+        {
+          "text": "Every script segment's text is written in Arabic script.",
+          "passed": true,
+          "evidence": "All segment text is Arabic; only 'VAR' appears in Latin, which is acceptable."
+        },
+        {
+          "text": "Each script's final segment ends with a question mark (؟ or ?) as a comment-bait CTA.",
+          "passed": true,
+          "evidence": "All 4 closing segments pose a question (contain ؟) followed by a 'tell me in the comments' call."
+        },
+        {
+          "text": "The most viral story — the Brazil 3-0 upset — is assigned the '18-24' primetime bucket.",
+          "passed": true,
+          "evidence": "Brazil 3-0 Morocco (virality 90) is assigned time_bucket '18-24'."
+        },
+        {
+          "text": "Script text is colloquial Egyptian Arabic, free of MSA markers (هذا/الذي/سوف/لقد/الآن).",
+          "passed": true,
+          "evidence": "No MSA markers found; consistently colloquial ('خد عندك','بيوجع','واحنا لسه','اللي بيتقال')."
+        }
+      ],
+      "notes": [],
+      "eval_name": "morning-brief"
+    },
+    {
+      "eval_id": 1,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 7,
+        "failed": 0,
+        "total": 7,
+        "time_seconds": 207.4,
+        "tokens": 33185,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "polished-script.json exists and parses as a JSON array of 3-5 segment objects.",
+          "passed": true,
+          "evidence": "Valid JSON array of 4 segment objects, each with text/image_prompt_or_url/duration_ms."
+        },
+        {
+          "text": "Every polished segment's duration_ms is between 6000 and 12000 (the input's 14000/13000/4000 violations are fixed).",
+          "passed": true,
+          "evidence": "Durations 7000/11000/9000/7000 — all within 6000-12000. The 14000, 13000 and 4000 violations are all corrected."
+        },
+        {
+          "text": "No polished segment text contains MSA markers (هذا/هذه/الذي/التي/سوف/لقد/الآن/يعتبر/نتحدث).",
+          "passed": true,
+          "evidence": "Zero MSA markers. Consistently colloquial: 'بيخلّع','خد الكورة','إيد فاضية','تتجبّل','بصراحة كده','لقديه'."
+        },
+        {
+          "text": "Segment 1 opens with a real hook (the news / a surprising element), not the generic 'في هذا الفيديو' intro.",
+          "passed": true,
+          "evidence": "Segment 1: 'الدقيقة 90... وولد عنده 19 سنة بيخلّع شباك ألمانيا!' — opens mid-action with the surprising fact."
+        },
+        {
+          "text": "The final segment is a specific comment-bait question (ends with ؟), not a generic 'subscribe / اشتراك / زر الجرس' sign-off.",
+          "passed": true,
+          "evidence": "Final segment: 'إسبانيا هتوصل لقديه في البطولة دي؟ قولّي رأيك في الكومنتات.' — a specific question; the banned subscribe CTA is removed."
+        },
+        {
+          "text": "Every segment's text is in Arabic script.",
+          "passed": true,
+          "evidence": "All 4 segments are Arabic."
+        },
+        {
+          "text": "The core facts are preserved (Spain beat Germany; a 19-year-old scored the late winner).",
+          "passed": true,
+          "evidence": "Both facts preserved. No fabricated facts added — the scoreline is left unstated rather than invented, consistent with the skill's facts-only rule."
+        }
+      ],
+      "notes": [],
+      "eval_name": "polish"
+    },
+    {
+      "eval_id": 2,
+      "configuration": "with_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 6,
+        "failed": 0,
+        "total": 6,
+        "time_seconds": 212.8,
+        "tokens": 28955,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "verification.json exists and parses as JSON with a boolean 'verified' and an array 'verification_sources'.",
+          "passed": true,
+          "evidence": "Valid JSON: verified (boolean) and verification_sources (array) both present, plus source_id and notes."
+        },
+        {
+          "text": "verified is true (the claim — 2026 World Cup final at MetLife Stadium on 19 July 2026 — is factually correct).",
+          "passed": true,
+          "evidence": "verified=true; the claim is factually correct."
+        },
+        {
+          "text": "verification_sources contains at least 2 URLs.",
+          "passed": true,
+          "evidence": "4 URLs supplied."
+        },
+        {
+          "text": "The verification_sources are distinct URLs, and none is the original twitter.com/WorldCupBuzz source.",
+          "passed": true,
+          "evidence": "4 distinct URLs; none is the original twitter source."
+        },
+        {
+          "text": "The cited sources are independent and reputable (e.g. FIFA, BBC, ESPN, Reuters, AP, major outlets).",
+          "passed": true,
+          "evidence": "Sources: FIFA.com (official), MetLife Stadium official event page, Wikipedia (x2). FIFA + venue official site are independent and authoritative."
+        },
+        {
+          "text": "response.md explains the cross-check — what claim was checked and against which sources.",
+          "passed": true,
+          "evidence": "response.md and notes break the claim into 3 sub-claims and cite which sources confirm each; includes a copyright/media reuse note."
+        }
+      ],
+      "notes": [],
+      "eval_name": "verify"
+    },
+    {
+      "eval_id": 0,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 10,
+        "failed": 0,
+        "total": 10,
+        "time_seconds": 269.2,
+        "tokens": 36801,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "content_ideas.json exists and parses as a JSON array of 3-4 video ideas (the weak 'wi-fi / gate times' story excluded).",
+          "passed": true,
+          "evidence": "Valid JSON array of 4 idea objects; wi-fi/logistics source not used (agent reported it dropped as low-value)."
+        },
+        {
+          "text": "Dedup worked: exactly one idea covers the Brazil 3-0 Morocco story despite the source dump containing a duplicated Ornstein row.",
+          "passed": true,
+          "evidence": "Exactly one Brazil idea (source_id a1...001); agent reported the duplicate Ornstein tweet removed."
+        },
+        {
+          "text": "No idea is built from the low-value 'stadium wi-fi / gate times' source item.",
+          "passed": true,
+          "evidence": "No wi-fi idea present."
+        },
+        {
+          "text": "Every idea has status='draft', language='ar-EG', and format='short_video'.",
+          "passed": true,
+          "evidence": "All 4 ideas: status='draft', language='ar-EG', format='short_video'."
+        },
+        {
+          "text": "Every idea has a distinct time_bucket, each one of '00-06','06-12','12-18','18-24'.",
+          "passed": true,
+          "evidence": "Buckets: 00-06, 06-12, 12-18, 18-24 — all distinct and valid."
+        },
+        {
+          "text": "Every script_segments array has 3-5 segments, and every segment duration_ms is between 6000 and 12000.",
+          "passed": true,
+          "evidence": "All 4 ideas have 4 segments; durations in {6000,7000,8000,9000} — within range."
+        },
+        {
+          "text": "Every script segment's text is written in Arabic script.",
+          "passed": true,
+          "evidence": "All segment text is Arabic."
+        },
+        {
+          "text": "Each script's final segment ends with a question mark (؟ or ?) as a comment-bait CTA.",
+          "passed": true,
+          "evidence": "All 4 closing segments pose a question and request comments."
+        },
+        {
+          "text": "The most viral story — the Brazil 3-0 upset — is assigned the '18-24' primetime bucket.",
+          "passed": true,
+          "evidence": "Brazil 0-3 Morocco (virality 88) assigned time_bucket '18-24'."
+        },
+        {
+          "text": "Script text is colloquial Egyptian Arabic, free of MSA markers (هذا/الذي/سوف/لقد/الآن).",
+          "passed": true,
+          "evidence": "No MSA markers; consistently colloquial."
+        }
+      ],
+      "notes": [],
+      "eval_name": "morning-brief"
+    },
+    {
+      "eval_id": 1,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 0.714,
+        "passed": 5,
+        "failed": 2,
+        "total": 7,
+        "time_seconds": 99.5,
+        "tokens": 22432,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "polished-script.json exists and parses as a JSON array of 3-5 segment objects.",
+          "passed": true,
+          "evidence": "Valid JSON array of 4 segment objects."
+        },
+        {
+          "text": "Every polished segment's duration_ms is between 6000 and 12000 (the input's 14000/13000/4000 violations are fixed).",
+          "passed": false,
+          "evidence": "Durations are 4000/5000/4000/4000 — every segment is below the 6000 ms floor. Without the skill's reference, the agent did not know the 6-12s rule and over-shortened."
+        },
+        {
+          "text": "No polished segment text contains MSA markers (هذا/هذه/الذي/التي/سوف/لقد/الآن/يعتبر/نتحدث).",
+          "passed": true,
+          "evidence": "No MSA markers; colloquial throughout ('دمّرت','ولد عنده','ودّع الحلم')."
+        },
+        {
+          "text": "Segment 1 opens with a real hook (the news / a surprising element), not the generic 'في هذا الفيديو' intro.",
+          "passed": true,
+          "evidence": "Segment 1: 'إسبانيا دمّرت ألمانيا في كأس العالم — وبهدف في الدقيقة الأخيرة!' — a real hook."
+        },
+        {
+          "text": "The final segment is a specific comment-bait question (ends with ؟), not a generic 'subscribe / اشتراك / زر الجرس' sign-off.",
+          "passed": false,
+          "evidence": "Final segment: 'كومنت بـ🔥 لو حسيت إن إسبانيا هتاخد الكأس — وفولوني عشان تعرف كل حاجة أولاً بأول!' — it is an emoji-comment prompt, not a genuine question, and it appends a generic 'فولوني' (follow me) ask. Ends with '!' not '؟'."
+        },
+        {
+          "text": "Every segment's text is in Arabic script.",
+          "passed": true,
+          "evidence": "All 4 segments are Arabic."
+        },
+        {
+          "text": "The core facts are preserved (Spain beat Germany; a 19-year-old scored the late winner).",
+          "passed": true,
+          "evidence": "Both required facts preserved. CAVEAT: the agent also fabricated a scoreline ('إسبانيا 2، ألمانيا 1') that is nowhere in the source — a hallucinated fact in a fact-based news product. The assertion as worded only checks preservation, so it passes, but the fabrication is a real defect."
+        }
+      ],
+      "notes": [],
+      "eval_name": "polish"
+    },
+    {
+      "eval_id": 2,
+      "configuration": "without_skill",
+      "run_number": 1,
+      "result": {
+        "pass_rate": 1.0,
+        "passed": 6,
+        "failed": 0,
+        "total": 6,
+        "time_seconds": 279.5,
+        "tokens": 21928,
+        "tool_calls": 0,
+        "errors": 0
+      },
+      "expectations": [
+        {
+          "text": "verification.json exists and parses as JSON with a boolean 'verified' and an array 'verification_sources'.",
+          "passed": true,
+          "evidence": "Valid JSON: verified (boolean) and verification_sources (array) present, plus source_id and notes."
+        },
+        {
+          "text": "verified is true (the claim — 2026 World Cup final at MetLife Stadium on 19 July 2026 — is factually correct).",
+          "passed": true,
+          "evidence": "verified=true; claim is factually correct."
+        },
+        {
+          "text": "verification_sources contains at least 2 URLs.",
+          "passed": true,
+          "evidence": "5 URLs supplied."
+        },
+        {
+          "text": "The verification_sources are distinct URLs, and none is the original twitter.com/WorldCupBuzz source.",
+          "passed": true,
+          "evidence": "5 distinct URLs; none is the original twitter source."
+        },
+        {
+          "text": "The cited sources are independent and reputable (e.g. FIFA, BBC, ESPN, Reuters, AP, major outlets).",
+          "passed": true,
+          "evidence": "Sources: FIFA.com, MetLife Stadium official page, Britannica, Wikipedia (x2) — independent and reputable."
+        },
+        {
+          "text": "response.md explains the cross-check — what claim was checked and against which sources.",
+          "passed": true,
+          "evidence": "response.md gives a claim-by-claim breakdown with source links; also flags that the @WorldCupBuzz handle itself is not authoritative."
+        }
+      ],
+      "notes": [],
+      "eval_name": "verify"
+    }
+  ],
+  "run_summary": {
+    "with_skill": {
+      "pass_rate": {
+        "mean": 1.0,
+        "stddev": 0.0,
+        "min": 1.0,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 241.6333,
+        "stddev": 54.684,
+        "min": 207.4,
+        "max": 304.7
+      },
+      "tokens": {
+        "mean": 34572.0,
+        "stddev": 6423.8,
+        "min": 28955,
+        "max": 41576
+      }
+    },
+    "without_skill": {
+      "pass_rate": {
+        "mean": 0.9047,
+        "stddev": 0.1651,
+        "min": 0.714,
+        "max": 1.0
+      },
+      "time_seconds": {
+        "mean": 216.0667,
+        "stddev": 101.081,
+        "min": 99.5,
+        "max": 279.5
+      },
+      "tokens": {
+        "mean": 27053.7,
+        "stddev": 8445.2,
+        "min": 21928,
+        "max": 36801
+      }
+    },
+    "delta": {
+      "pass_rate": "+0.10",
+      "time_seconds": "+25.6",
+      "tokens": "+7518"
+    }
+  },
+  "notes": [
+    "Skill delta is concentrated entirely in the 'polish' eval (1.00 with skill vs 0.71 baseline). morning-brief and verify pass 100% in BOTH configurations on the objective assertions.",
+    "The polish baseline failed exactly the two discipline rules the skill's tone-guide encodes: the 6-12s segment-duration rule (baseline produced 4-5s segments) and the no-generic-CTA rule (baseline appended a 'follow me' ask, did not close on a question).",
+    "Critical defect NOT caught by the assertion set: the polish baseline fabricated a scoreline ('Spain 2-1 Germany') absent from the source. The skill's facts-only rule prevented this. Add a no-fabrication assertion in iteration 2.",
+    "morning-brief assertions are non-discriminating at iteration 1 (10/10 both configs) — they check structure, not editorial quality. The skill's real morning-brief edge (richer brief jsonb, correct verification='unverified', omitting DB-generated id/created_at) shows only in grading notes. Consider promoting these to assertions.",
+    "The baseline was hand-briefed in every eval prompt with the 4 time-buckets and the content_ideas concept. Production has no such briefing — the skill IS that briefing — so this benchmark understates the skill's operational value.",
+    "Timing: with_skill averages 242s vs 216s baseline (+26s) from reading the reference files. Negligible at a 4-videos/day cadence.",
+    "verify is a weak discriminator here: the test claim is clearly true and trivially corroborated. A harder fixture (an unverifiable or partially-false claim) would better exercise the skill's verification discipline."
+  ]
+}

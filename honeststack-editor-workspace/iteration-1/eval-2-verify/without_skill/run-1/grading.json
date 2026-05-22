@@ -1,0 +1,13 @@
+{
+  "expectations": [
+    {"text": "verification.json exists and parses as JSON with a boolean 'verified' and an array 'verification_sources'.", "passed": true, "evidence": "Valid JSON: verified (boolean) and verification_sources (array) present, plus source_id and notes."},
+    {"text": "verified is true (the claim — 2026 World Cup final at MetLife Stadium on 19 July 2026 — is factually correct).", "passed": true, "evidence": "verified=true; claim is factually correct."},
+    {"text": "verification_sources contains at least 2 URLs.", "passed": true, "evidence": "5 URLs supplied."},
+    {"text": "The verification_sources are distinct URLs, and none is the original twitter.com/WorldCupBuzz source.", "passed": true, "evidence": "5 distinct URLs; none is the original twitter source."},
+    {"text": "The cited sources are independent and reputable (e.g. FIFA, BBC, ESPN, Reuters, AP, major outlets).", "passed": true, "evidence": "Sources: FIFA.com, MetLife Stadium official page, Britannica, Wikipedia (x2) — independent and reputable."},
+    {"text": "response.md explains the cross-check — what claim was checked and against which sources.", "passed": true, "evidence": "response.md gives a claim-by-claim breakdown with source links; also flags that the @WorldCupBuzz handle itself is not authoritative."}
+  ],
+  "summary": {"passed": 6, "failed": 0, "total": 6, "pass_rate": 1.0},
+  "timing": {"total_tokens": 21928, "total_duration_seconds": 279.5},
+  "notes": ["Both configurations handled this straightforward true claim well. The skill added a copyright/media-reuse note; the baseline added a caveat about the source handle's authority. The verify task does not strongly discriminate skill value on an easy, clearly-true claim."]
+}

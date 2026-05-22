@@ -1,0 +1,191 @@
+[
+  {
+    "id": "ci000000-0000-0000-0000-000000000001",
+    "owner_id": "00000000-0000-0000-0000-000000000001",
+    "source_id": "a1000000-0000-0000-0000-000000000009",
+    "hook": "مبابي طلع من الملعب وهو بيعرج... وفرنسا عمالة تصلي!",
+    "angle": "Mbappe hamstring scare — France sweating on scans",
+    "format": "short_video",
+    "platforms": ["instagram", "youtube", "tiktok"],
+    "urgency": "high",
+    "status": "draft",
+    "language": "ar-EG",
+    "time_bucket": "00-06",
+    "script_segments": [
+      {
+        "text": "مبابي طلع من الملعب وهو بيعرج... وفرنسا عمالة تصلي!",
+        "image_prompt_or_url": "Stylised 2D illustration, brand colours, a French football player limping off the pitch supported by a team doctor, dramatic stadium floodlights, vertical 9:16",
+        "duration_ms": 7000
+      },
+      {
+        "text": "في نص الماتش، مبابي حس بحاجة في الفخدة. المدرب غيّره على طول. محدش كان عايز يتكلم في الأول.",
+        "image_prompt_or_url": "Stylised 2D illustration, brand colours, a manager gesturing urgently to the touchline while a star player clutches his hamstring, vertical 9:16",
+        "duration_ms": 9000
+      },
+      {
+        "text": "دلوقتي بيستنّوا نتيجة الأشعة. لو الإصابة جدية، فرنسا ممكن تكمل في كأس العالم من غير أهم لاعب عندها.",
+        "image_prompt_or_url": "Stylised 2D illustration, brand colours, a worried coaching staff huddled around a medical tablet showing a scan result, vertical 9:16",
+        "duration_ms": 9000
+      },
+      {
+        "text": "أيوه، فرنسا معاها لاعبين تانيين. بس فريق من غير نجمه الأساسي... بتفتكر يعدّي؟ قولّي رأيك في الكومنتات.",
+        "image_prompt_or_url": "Stylised 2D illustration, brand colours, French flag colours in the background with a question mark symbol overlaid, vertical 9:16",
+        "duration_ms": 8000
+      }
+    ],
+    "brief": {
+      "summary_en": "Kylian Mbappe limped off with a hamstring problem in France's 2-0 win. He will undergo scans. France's tournament hopes hinge on the result.",
+      "virality_score": 65,
+      "source_ids": [
+        "a1000000-0000-0000-0000-000000000009",
+        "a1000000-0000-0000-0000-000000000010"
+      ],
+      "verification": "partial",
+      "visual_notes": "No real match footage. All segments use Nano Banana illustrations in brand style.",
+      "cta": "فريق من غير نجمه الأساسي... بتفتكر يعدّي؟"
+    },
+    "created_at": "2026-06-16T05:00:00Z"
+  },
+  {
+    "id": "ci000000-0000-0000-0000-000000000002",
+    "owner_id": "00000000-0000-0000-0000-000000000001",
+    "source_id": "a1000000-0000-0000-0000-000000000007",
+    "hook": "ضربة جزا في الدقيقة الأخيرة... بسببها الـVAR ولّع النت كله!",
+    "angle": "Portugal VAR penalty controversy knocks Uruguay out",
+    "format": "short_video",
+    "platforms": ["instagram", "youtube", "tiktok"],
+    "urgency": "high",
+    "status": "draft",
+    "language": "ar-EG",
+    "time_bucket": "06-12",
+    "script_segments": [
+      {
+        "text": "ضربة جزا في الدقيقة الأخيرة... بسببها الـVAR ولّع النت كله!",
+        "image_prompt_or_url": "Stylised 2D illustration, brand colours, a VAR monitor screen glowing on a football touchline at night, referee pointing to the spot, vertical 9:16",
+        "duration_ms": 7000
+      },
+      {
+        "text": "اللاعب وقع جوه منطقة الجزا، الحكم قال كمّلوا. وبعدين رجع لشاشة الـVAR... وغيّر رأيه.",
+        "image_prompt_or_url": "Stylised 2D illustration, brand colours, referee walking to pitchside VAR monitor while players crowd around in protest, vertical 9:16",
+        "duration_ms": 9000
+      },
+      {
+        "text": "البرتغال ضربت الجزا وكسبت. الأوروغواي خرجت من البطولة. والمدرب قال عليها إنها فضيحة.",
+        "image_prompt_or_url": "Stylised 2D illustration, brand colours, Uruguayan players slumped in dejection on the pitch, Portuguese players celebrating in background, vertical 9:16",
+        "duration_ms": 9000
+      },
+      {
+        "text": "بصراحة كده... دي ضربة جزا ولا ظلم؟ عايز رأيك إنت بالظبط.",
+        "image_prompt_or_url": "Stylised 2D illustration, brand colours, split screen Portugal fans cheering vs Uruguay fans devastated, vertical 9:16",
+        "duration_ms": 8000
+      }
+    ],
+    "brief": {
+      "summary_en": "A stoppage-time VAR penalty in the 95th minute sent Portugal through and eliminated Uruguay. Uruguay's coach called it 'a scandal'.",
+      "virality_score": 72,
+      "source_ids": [
+        "a1000000-0000-0000-0000-000000000007",
+        "a1000000-0000-0000-0000-000000000008"
+      ],
+      "verification": "partial",
+      "visual_notes": "No real match footage. All segments use Nano Banana illustrations in brand style.",
+      "cta": "دي ضربة جزا ولا ظلم؟ عايز رأيك إنت بالظبط."
+    },
+    "created_at": "2026-06-16T06:00:00Z"
+  },
+  {
+    "id": "ci000000-0000-0000-0000-000000000003",
+    "owner_id": "00000000-0000-0000-0000-000000000001",
+    "source_id": "a1000000-0000-0000-0000-000000000005",
+    "hook": "الدقيقة 90... وواد عنده 19 سنة بيقلب الماتش لوحده!",
+    "angle": "19-year-old Ferreira late winner for Spain vs Germany",
+    "format": "short_video",
+    "platforms": ["instagram", "youtube", "tiktok"],
+    "urgency": "high",
+    "status": "draft",
+    "language": "ar-EG",
+    "time_bucket": "12-18",
+    "script_segments": [
+      {
+        "text": "الدقيقة 90... وواد عنده 19 سنة بيقلب الماتش لوحده!",
+        "image_prompt_or_url": "https://pbs.twimg.com/media/ferreira_winner.jpg",
+        "duration_ms": 6000
+      },
+      {
+        "text": "الكل كان مستني التعادل. إسبانيا وألمانيا ماتش حلو بس مفيش نتيجة. وبعدين الواد الصغير خد الكورة وحطها في الزاوية.",
+        "image_prompt_or_url": "Stylised 2D illustration, brand colours, a young substitute sprinting onto the pitch with intense focus, packed stadium behind him, vertical 9:16",
+        "duration_ms": 9000
+      },
+      {
+        "text": "دييغو فيريرا، 19 سنة. بقى تاني أصغر لاعب يسجل هدف فوز في تاريخ كأس العالم من دور الـ16. والناس لسه بتسأل جه منين.",
+        "image_prompt_or_url": "Stylised 2D illustration, brand colours, a teenage footballer holding up his national team shirt to the crowd, confetti falling, vertical 9:16",
+        "duration_ms": 9000
+      },
+      {
+        "text": "إسبانيا في ربع النهائي. وألمانيا تاني مرة ترجع بيوت بدري. افتكر أول موهبة صغيرة بهرتك في الكورة... مين كانت؟ سيبهالي تحت.",
+        "image_prompt_or_url": "Stylised 2D illustration, brand colours, Spanish team celebrating in a huddle with a young player at the centre, vertical 9:16",
+        "duration_ms": 8000
+      }
+    ],
+    "brief": {
+      "summary_en": "19-year-old substitute Diego Ferreira scored a 90th-minute winner for Spain against Germany, becoming the second-youngest scorer of a World Cup knockout-stage winning goal.",
+      "virality_score": 78,
+      "source_ids": [
+        "a1000000-0000-0000-0000-000000000005",
+        "a1000000-0000-0000-0000-000000000006"
+      ],
+      "verification": "partial",
+      "visual_notes": "Segment 1 uses the journalist's copyright-safe photo. Remaining segments are Nano Banana illustrations in brand style.",
+      "cta": "افتكر أول موهبة صغيرة بهرتك في الكورة... مين كانت؟"
+    },
+    "created_at": "2026-06-16T07:00:00Z"
+  },
+  {
+    "id": "ci000000-0000-0000-0000-000000000004",
+    "owner_id": "00000000-0000-0000-0000-000000000001",
+    "source_id": "a1000000-0000-0000-0000-000000000001",
+    "hook": "تلات أهداف في شبكة البرازيل؟ ايوه... واحنا لسه في الدور الأول!",
+    "angle": "Brazil 0-3 Morocco — biggest WC upset and historic stat",
+    "format": "short_video",
+    "platforms": ["instagram", "youtube", "tiktok"],
+    "urgency": "high",
+    "status": "draft",
+    "language": "ar-EG",
+    "time_bucket": "18-24",
+    "script_segments": [
+      {
+        "text": "تلات أهداف في شبكة البرازيل؟ ايوه... واحنا لسه في الدور الأول!",
+        "image_prompt_or_url": "https://pbs.twimg.com/media/morocco_celebrate.jpg",
+        "duration_ms": 7000
+      },
+      {
+        "text": "منتخب كله نجوم، وكل اللي عمله إنه اترص قدام مرماه. والمدرب قاعد على البنش مش لاقي يعمل إيه.",
+        "image_prompt_or_url": "Stylised 2D illustration, brand colours, a samba-yellow football team defending desperately around their goal, dramatic stadium lighting, vertical 9:16",
+        "duration_ms": 9000
+      },
+      {
+        "text": "وخد عندك الرقم اللي بيوجع: دي أكبر خسارة للبرازيل في كأس العالم من سنة 1934. يعني أكتر من تسعين سنة!",
+        "image_prompt_or_url": "Stylised 2D illustration, brand colours, a large number '1934' overlaid on a green pitch, Moroccan players in the background celebrating, vertical 9:16",
+        "duration_ms": 9000
+      },
+      {
+        "text": "المغرب لعبت كأس عالم. مش حظ، مش مصادفة. فريق عنده نظام وقلب. تخيل بس لو ده حصل للأهلي... كنت هتعمل إيه؟ قولّي في الكومنتات.",
+        "image_prompt_or_url": "Stylised 2D illustration, brand colours, Moroccan players in red jerseys celebrating with fans in background, stadium confetti, vertical 9:16",
+        "duration_ms": 8000
+      }
+    ],
+    "brief": {
+      "summary_en": "Brazil suffered a shocking 3-0 defeat to Morocco in their World Cup 2026 group opener — Brazil's heaviest World Cup defeat since 1934. Three tier-1 sources corroborate the result.",
+      "virality_score": 88,
+      "source_ids": [
+        "a1000000-0000-0000-0000-000000000001",
+        "a1000000-0000-0000-0000-000000000002",
+        "a1000000-0000-0000-0000-000000000003"
+      ],
+      "verification": "partial",
+      "visual_notes": "Segment 1 uses the journalist's own press photo (copyright-safe). Segments 2-4 are Nano Banana recreations in brand style.",
+      "cta": "لو ده حصل للأهلي كنت هتعمل إيه؟ قولّي في الكومنتات."
+    },
+    "created_at": "2026-06-16T08:00:00Z"
+  }
+]

@@ -1,0 +1,17 @@
+{
+  "expectations": [
+    {"text": "content_ideas.json exists and parses as a JSON array of 3-4 video ideas (the weak 'wi-fi / gate times' story excluded).", "passed": true, "evidence": "Valid JSON array of 4 idea objects. The wi-fi/logistics source (a1...011) is not used."},
+    {"text": "Dedup worked: exactly one idea covers the Brazil 3-0 Morocco story despite the source dump containing a duplicated Ornstein row.", "passed": true, "evidence": "Exactly one Brazil idea (source_id a1...001); brief.source_ids lists the 3 distinct Brazil rows, the duplicated Ornstein row (a1...004) is correctly not double-counted."},
+    {"text": "No idea is built from the low-value 'stadium wi-fi / gate times' source item.", "passed": true, "evidence": "response.md logs the wi-fi item as scored ~5 and discarded below the threshold."},
+    {"text": "Every idea has status='draft', language='ar-EG', and format='short_video'.", "passed": true, "evidence": "All 4 ideas: status='draft', language='ar-EG', format='short_video'."},
+    {"text": "Every idea has a distinct time_bucket, each one of '00-06','06-12','12-18','18-24'.", "passed": true, "evidence": "Buckets: 18-24, 12-18, 06-12, 00-06 — all four distinct and valid."},
+    {"text": "Every script_segments array has 3-5 segments, and every segment duration_ms is between 6000 and 12000.", "passed": true, "evidence": "Segment counts 5/4/4/4; all durations in {7000,8000,9000,10000,11000} — within range."},
+    {"text": "Every script segment's text is written in Arabic script.", "passed": true, "evidence": "All segment text is Arabic; only 'VAR' appears in Latin, which is acceptable."},
+    {"text": "Each script's final segment ends with a question mark (؟ or ?) as a comment-bait CTA.", "passed": true, "evidence": "All 4 closing segments pose a question (contain ؟) followed by a 'tell me in the comments' call."},
+    {"text": "The most viral story — the Brazil 3-0 upset — is assigned the '18-24' primetime bucket.", "passed": true, "evidence": "Brazil 3-0 Morocco (virality 90) is assigned time_bucket '18-24'."},
+    {"text": "Script text is colloquial Egyptian Arabic, free of MSA markers (هذا/الذي/سوف/لقد/الآن).", "passed": true, "evidence": "No MSA markers found; consistently colloquial ('خد عندك','بيوجع','واحنا لسه','اللي بيتقال')."}
+  ],
+  "summary": {"passed": 10, "failed": 0, "total": 10, "pass_rate": 1.0},
+  "timing": {"total_tokens": 41576, "total_duration_seconds": 304.7},
+  "notes": ["brief.verification correctly set to 'unverified' (verify command not yet run). id/created_at correctly omitted (DB-generated)."]
+}

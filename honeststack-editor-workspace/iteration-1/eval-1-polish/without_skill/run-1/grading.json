@@ -1,0 +1,19 @@
+{
+  "expectations": [
+    {"text": "polished-script.json exists and parses as a JSON array of 3-5 segment objects.", "passed": true, "evidence": "Valid JSON array of 4 segment objects."},
+    {"text": "Every polished segment's duration_ms is between 6000 and 12000 (the input's 14000/13000/4000 violations are fixed).", "passed": false, "evidence": "Durations are 4000/5000/4000/4000 — every segment is below the 6000 ms floor. Without the skill's reference, the agent did not know the 6-12s rule and over-shortened."},
+    {"text": "No polished segment text contains MSA markers (هذا/هذه/الذي/التي/سوف/لقد/الآن/يعتبر/نتحدث).", "passed": true, "evidence": "No MSA markers; colloquial throughout ('دمّرت','ولد عنده','ودّع الحلم')."},
+    {"text": "Segment 1 opens with a real hook (the news / a surprising element), not the generic 'في هذا الفيديو' intro.", "passed": true, "evidence": "Segment 1: 'إسبانيا دمّرت ألمانيا في كأس العالم — وبهدف في الدقيقة الأخيرة!' — a real hook."},
+    {"text": "The final segment is a specific comment-bait question (ends with ؟), not a generic 'subscribe / اشتراك / زر الجرس' sign-off.", "passed": false, "evidence": "Final segment: 'كومنت بـ🔥 لو حسيت إن إسبانيا هتاخد الكأس — وفولوني عشان تعرف كل حاجة أولاً بأول!' — it is an emoji-comment prompt, not a genuine question, and it appends a generic 'فولوني' (follow me) ask. Ends with '!' not '؟'."},
+    {"text": "Every segment's text is in Arabic script.", "passed": true, "evidence": "All 4 segments are Arabic."},
+    {"text": "The core facts are preserved (Spain beat Germany; a 19-year-old scored the late winner).", "passed": true, "evidence": "Both required facts preserved. CAVEAT: the agent also fabricated a scoreline ('إسبانيا 2، ألمانيا 1') that is nowhere in the source — a hallucinated fact in a fact-based news product. The assertion as worded only checks preservation, so it passes, but the fabrication is a real defect."}
+  ],
+  "summary": {"passed": 5, "failed": 2, "total": 7, "pass_rate": 0.714},
+  "timing": {"total_tokens": 22432, "total_duration_seconds": 99.5},
+  "eval_feedback": {
+    "suggestions": [
+      {"assertion": "The core facts are preserved (Spain beat Germany; a 19-year-old scored the late winner).", "reason": "This assertion only checks that required facts survive; it does not catch fabricated facts. The baseline invented a 2-1 scoreline. Add an assertion: 'No fact is stated that is absent from the source.'"}
+    ],
+    "overall": "Consider a no-fabrication assertion for polish, since invented facts are a critical failure for a news product."
+  }
+}

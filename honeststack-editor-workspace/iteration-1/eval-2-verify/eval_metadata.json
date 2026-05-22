@@ -1,0 +1,13 @@
+{
+  "eval_id": 2,
+  "eval_name": "verify",
+  "prompt": "before i let this into a video — verify the claim in fixtures/verify-raw-source.json. cross-check it properly against independent sources. supabase mcp is down so don't try to write, just tell me verified true or false and give me the verification_sources array you'd put on the row.",
+  "assertions": [
+    "verification.json exists and parses as JSON with a boolean 'verified' and an array 'verification_sources'.",
+    "verified is true (the claim — 2026 World Cup final at MetLife Stadium on 19 July 2026 — is factually correct).",
+    "verification_sources contains at least 2 URLs.",
+    "The verification_sources are distinct URLs, and none is the original twitter.com/WorldCupBuzz source.",
+    "The cited sources are independent and reputable (e.g. FIFA, BBC, ESPN, Reuters, AP, major outlets).",
+    "response.md explains the cross-check — what claim was checked and against which sources."
+  ]
+}
