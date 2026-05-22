@@ -10,6 +10,8 @@ out/
 # env & secrets
 .env
 .env.*
+# exception: the cockpit's public frontend config (anon key only — RLS-protected, safe in git)
+!cockpit/.env.production
 
 # python
 __pycache__/
