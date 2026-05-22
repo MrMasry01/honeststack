@@ -38,8 +38,10 @@ const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 const STORAGE_BUCKET = "assets";
 // Cap render/encode parallelism so the container stays within its RAM
-// budget. Overridable via env if a larger Railway plan is provisioned.
-const RENDER_CONCURRENCY = Number(process.env.RENDER_CONCURRENCY) || 2;
+// budget. Default is 1 (safest on small Railway plans — 2 simultaneous
+// renders have OOM-killed the container in the past). Override via env if
+// running on a larger plan.
+const RENDER_CONCURRENCY = Number(process.env.RENDER_CONCURRENCY) || 1;
 
 if (!RENDER_SECRET) {
   console.warn("⚠️  RENDER_SECRET is not set — /render will reject all requests.");
@@ -122,6 +124,91 @@ async function finalizeIdea(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[${jobId}] finalize error:`, message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Failure handling — when a render fails, mark the matching assets row as
+// 'error' so the failure is visible and the row isn't stuck at 'rendering'.
+// ---------------------------------------------------------------------------
+
+async function markAssetError(
+  ideaId: string,
+  jobId: string,
+  errorMessage: string
+): Promise<void> {
+  if (!supabase) return;
+  try {
+    const { error } = await supabase
+      .from("assets")
+      .update({
+        media: {
+          status: "error",
+          job_id: jobId,
+          error: errorMessage.slice(0, 500),
+        },
+      })
+      .eq("idea_id", ideaId);
+    if (error) {
+      console.error(`[${jobId}] markAssetError DB update failed:`, error.message);
+    } else {
+      console.log(`[${jobId}] asset for idea ${ideaId} marked error`);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[${jobId}] markAssetError exception:`, message);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Orphan sweep — on service startup, mark any assets row stuck at 'rendering'
+// for >15 minutes as 'error: orphaned'. The in-memory job store doesn't
+// survive container restarts (OOM-kill, redeploy, idle), so without this
+// sweep, in-flight assets at the moment of restart are stuck forever.
+// ---------------------------------------------------------------------------
+
+async function sweepOrphans(): Promise<void> {
+  if (!supabase) return;
+  try {
+    const cutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const { data: orphans, error: queryError } = await supabase
+      .from("assets")
+      .select("id, idea_id, media, updated_at")
+      .eq("media->>status", "rendering")
+      .lt("updated_at", cutoff);
+    if (queryError) {
+      console.error("orphan sweep query failed:", queryError.message);
+      return;
+    }
+    if (!orphans || orphans.length === 0) {
+      console.log("orphan sweep: no stuck 'rendering' assets");
+      return;
+    }
+    console.log(
+      `orphan sweep: marking ${orphans.length} stuck 'rendering' asset(s) as error`
+    );
+    for (const o of orphans) {
+      const jobId = (o.media as { job_id?: string })?.job_id ?? "unknown";
+      const { error: updateError } = await supabase
+        .from("assets")
+        .update({
+          media: {
+            status: "error",
+            job_id: jobId,
+            error: "orphaned (Remotion service restarted mid-render)",
+          },
+        })
+        .eq("id", o.id);
+      if (updateError) {
+        console.error(
+          `orphan sweep update failed for asset ${o.id}:`,
+          updateError.message
+        );
+      }
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("orphan sweep exception:", message);
   }
 }
 
@@ -237,6 +324,12 @@ async function runRender(jobId: string, inputProps: NewsRoundupProps) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[${jobId}] ❌ render failed:`, message);
     updateJob(jobId, { status: "error", error: message });
+    // Write the failure back to the assets row — without this, a failed
+    // render leaves the asset stuck at 'rendering' forever (silent failure).
+    const ideaId = jobs.get(jobId)?.idea_id;
+    if (ideaId) {
+      await markAssetError(ideaId, jobId, message);
+    }
   } finally {
     // Clean up the temp file regardless of outcome.
     try {
@@ -307,6 +400,8 @@ app.get("/jobs/:id", (req: Request, res: Response) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 HonestStack render service listening on :${PORT}`);
+  // Recover any orphaned 'rendering' assets from before this restart.
+  sweepOrphans().catch((err) => console.error("orphan sweep error:", err));
   // Warm the bundle in the background so the first render is faster.
   getBundle().catch((err) => {
     console.error("Initial bundle failed:", err);
