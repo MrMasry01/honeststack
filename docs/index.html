@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HonestStack — World Cup 2026 short-form football news, in Egyptian Arabic</title>
+  <meta name="description" content="HonestStack is an automated short-form video engine producing rapid-fire World Cup 2026 football roundups in colloquial Egyptian Arabic, published to TikTok, Instagram, and YouTube — four times a day.">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="apple-touch-icon" href="/favicon.png">
+  <meta name="theme-color" content="#0E1B2C">
+  <meta property="og:title" content="HonestStack — World Cup 2026 football news, in Egyptian Arabic">
+  <meta property="og:description" content="Rapid-fire World Cup 2026 roundups hosted by a Pharaoh mascot — colloquial Egyptian Arabic, four times a day.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://honeststack.co.uk">
+  <meta property="og:image" content="https://honeststack.co.uk/favicon.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body {
+      background: #0E1B2C;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    img { max-width: 100%; display: block; }
+    a { color: #F4C20D; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ---------- Nav ---------- */
+    .nav {
+      position: sticky; top: 0; z-index: 50;
+      background: rgba(14, 27, 44, 0.92);
+      backdrop-filter: saturate(150%) blur(8px);
+      -webkit-backdrop-filter: saturate(150%) blur(8px);
+      border-bottom: 1px solid #1e3050;
+    }
+    .nav-wrap {
+      max-width: 1120px; margin: 0 auto;
+      padding: 14px 24px;
+      display: flex; align-items: center; justify-content: space-between; gap: 24px;
+    }
+    .brand {
+      display: flex; align-items: center; gap: 10px;
+      color: #ffffff; text-decoration: none;
+      font-weight: 700; font-size: 17px; letter-spacing: -0.3px;
+    }
+    .brand:hover { text-decoration: none; }
+    .brand img { width: 28px; height: 28px; border-radius: 6px; }
+    .nav nav { display: flex; gap: 26px; }
+    .nav nav a {
+      color: #cbd5e1; font-size: 14px; font-weight: 500;
+    }
+    .nav nav a:hover { color: #F4C20D; text-decoration: none; }
+    @media (max-width: 640px) {
+      .nav nav { display: none; }
+    }
+
+    /* ---------- Hero ---------- */
+    .hero {
+      padding: 88px 24px 72px;
+      background:
+        radial-gradient(900px 520px at 78% 28%, rgba(244, 194, 13, 0.10), transparent 60%),
+        radial-gradient(720px 480px at 8% 22%, rgba(30, 48, 80, 0.65), transparent 65%);
+    }
+    .hero-wrap {
+      max-width: 1120px; margin: 0 auto;
+      display: grid; grid-template-columns: 1.15fr 1fr; gap: 56px; align-items: center;
+    }
+    .kicker {
+      display: inline-block;
+      color: #F4C20D; font-size: 12px; font-weight: 700;
+      letter-spacing: 2px; text-transform: uppercase;
+      margin-bottom: 18px;
+    }
+    .hero h1 {
+      font-size: 48px; line-height: 1.08; color: #ffffff;
+      letter-spacing: -1.2px; margin-bottom: 22px; font-weight: 700;
+    }
+    .hero h1 .accent { color: #F4C20D; }
+    .lede {
+      color: #cbd5e1; font-size: 17px; line-height: 1.65;
+      max-width: 560px; margin-bottom: 30px;
+    }
+    .lede .ar { font-size: 16px; color: #94a3b8; direction: rtl; }
+    .cta-row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .btn-primary, .btn-secondary {
+      display: inline-block; padding: 13px 24px; border-radius: 10px;
+      font-weight: 700; font-size: 14px; letter-spacing: 0.2px;
+      text-decoration: none;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .btn-primary { background: #F4C20D; color: #0E1B2C; }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 24px rgba(244, 194, 13, 0.25);
+      text-decoration: none;
+    }
+    .btn-secondary {
+      background: transparent; color: #e2e8f0;
+      border: 1px solid #243a55;
+    }
+    .btn-secondary:hover {
+      transform: translateY(-2px); border-color: #F4C20D; color: #F4C20D;
+      text-decoration: none;
+    }
+
+    .hero-art { display: flex; justify-content: center; }
+    .hero-card {
+      background: #ffffff;
+      border-radius: 28px;
+      padding: 28px 24px 12px;
+      max-width: 360px; width: 100%;
+      box-shadow:
+        0 0 80px rgba(244, 194, 13, 0.20),
+        0 30px 60px rgba(0, 0, 0, 0.55);
+      position: relative;
+    }
+    .hero-card img { width: 100%; height: auto; }
+    .hero-card-tag {
+      position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+      background: #0E1B2C; color: #F4C20D;
+      font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+      padding: 6px 14px; border-radius: 999px;
+      border: 1px solid #243a55;
+    }
+    @media (max-width: 860px) {
+      .hero { padding: 56px 24px 52px; }
+      .hero-wrap { grid-template-columns: 1fr; text-align: center; gap: 40px; }
+      .hero h1 { font-size: 34px; letter-spacing: -0.8px; }
+      .lede { margin-left: auto; margin-right: auto; }
+      .cta-row { justify-content: center; }
+      .hero-art { order: -1; }
+      .hero-card { max-width: 260px; }
+    }
+
+    /* ---------- Generic section ---------- */
+    section.section {
+      max-width: 1120px; margin: 0 auto;
+      padding: 80px 24px;
+    }
+    section.section h2 {
+      color: #ffffff; font-size: 32px; letter-spacing: -0.5px;
+      margin-bottom: 22px; font-weight: 700;
+    }
+    section.section h2 .accent { color: #F4C20D; }
+    section.section p {
+      color: #cbd5e1; font-size: 16.5px; max-width: 760px;
+      margin-bottom: 14px;
+    }
+    @media (max-width: 640px) {
+      section.section { padding: 56px 24px; }
+      section.section h2 { font-size: 26px; }
+    }
+
+    /* ---------- How it works ---------- */
+    .steps {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px;
+      margin-top: 36px;
+    }
+    .step {
+      background: #162438; border: 1px solid #243a55;
+      border-radius: 16px; padding: 24px 22px 22px;
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+    .step:hover { border-color: rgba(244, 194, 13, 0.4); transform: translateY(-3px); }
+    .step-n {
+      color: #F4C20D; font-size: 12px; font-weight: 800; letter-spacing: 2px;
+      margin-bottom: 12px;
+    }
+    .step h3 {
+      color: #ffffff; font-size: 18px; margin-bottom: 8px; font-weight: 700;
+    }
+    .step p { font-size: 14.5px; color: #94a3b8; margin: 0; line-height: 1.55; }
+    @media (max-width: 900px) {
+      .steps { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 520px) {
+      .steps { grid-template-columns: 1fr; }
+    }
+
+    /* ---------- Platforms ---------- */
+    .plat-row {
+      display: flex; gap: 14px; flex-wrap: wrap; margin-top: 28px;
+    }
+    .plat {
+      padding: 16px 28px; border-radius: 12px;
+      background: #162438; border: 1px solid #243a55;
+      color: #ffffff; font-weight: 600; font-size: 16px;
+      display: inline-flex; align-items: center; gap: 10px;
+    }
+    .plat .dot { width: 8px; height: 8px; border-radius: 50%; background: #F4C20D; }
+
+    /* ---------- Voice (Arabic showcase) ---------- */
+    .voice {
+      background: linear-gradient(180deg, transparent 0%, #0a1422 100%);
+    }
+    .voice .quote {
+      max-width: 760px; margin: 32px 0 0;
+      padding: 28px 32px;
+      background: #162438; border: 1px solid #243a55; border-radius: 16px;
+      direction: rtl;
+      font-size: 19px; line-height: 1.8;
+      color: #e2e8f0;
+    }
+    .voice .quote .credit {
+      direction: ltr; text-align: left;
+      color: #94a3b8; font-size: 12px;
+      letter-spacing: 1px; text-transform: uppercase;
+      margin-top: 16px;
+    }
+
+    /* ---------- Footer ---------- */
+    .foot {
+      background: #0a1422;
+      border-top: 1px solid #1e3050;
+      padding: 56px 24px 28px;
+    }
+    .foot-wrap {
+      max-width: 1120px; margin: 0 auto;
+      display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 36px;
+      padding-bottom: 28px;
+    }
+    .foot-brand {
+      display: flex; align-items: center; gap: 14px;
+    }
+    .foot-brand img { width: 44px; height: 44px; border-radius: 8px; }
+    .wordmark-lg { color: #ffffff; font-weight: 700; font-size: 20px; letter-spacing: -0.4px; }
+    .tag { color: #94a3b8; font-size: 13px; margin-top: 4px; max-width: 280px; }
+    .foot-col .h {
+      color: #ffffff; font-size: 12px; font-weight: 800;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    .foot-col a {
+      display: block; color: #cbd5e1; font-size: 14px;
+      margin-bottom: 7px; text-decoration: none;
+    }
+    .foot-col a:hover { color: #F4C20D; }
+    .copy {
+      max-width: 1120px; margin: 0 auto;
+      padding-top: 22px; border-top: 1px solid #1e3050;
+      color: #64748b; font-size: 13px;
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+    }
+    @media (max-width: 760px) {
+      .foot-wrap { grid-template-columns: 1fr; gap: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-wrap">
+      <a href="/" class="brand">
+        <img src="/favicon.png" alt="">
+        <span>HonestStack</span>
+      </a>
+      <nav>
+        <a href="#what">About</a>
+        <a href="#how">How it works</a>
+        <a href="#platforms">Platforms</a>
+        <a href="#contact">Contact</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="hero-wrap">
+      <div class="hero-text">
+        <div class="kicker">FIFA World Cup 2026</div>
+        <h1>The football roundup,<br>every six hours,<br><span class="accent">in your accent.</span></h1>
+        <p class="lede">
+          HonestStack is an automated short-form video engine. It scrapes every meaningful World Cup 2026 story, writes a rapid-fire roundup in colloquial Egyptian Arabic <span class="ar">(عامية مصرية)</span>, and publishes it to TikTok, Instagram, and YouTube — four times a day. Same Pharaoh. Same voice. No filler.
+        </p>
+        <div class="cta-row">
+          <a href="#how" class="btn-primary">How it works</a>
+          <a href="#platforms" class="btn-secondary">Where to watch</a>
+        </div>
+      </div>
+      <div class="hero-art">
+        <div class="hero-card">
+          <img src="/assets/pharaoh.png" alt="HonestStack's Pharaoh mascot — the show's animated Egyptian host">
+          <div class="hero-card-tag">Your host</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="what">
+    <h2>What HonestStack <span class="accent">is</span></h2>
+    <p>
+      HonestStack is a content engine built around one show: a daily World Cup 2026 roundup, hosted by a 2D animated Egyptian Pharaoh and narrated in colloquial Egyptian Arabic. Five to six football stories per video — the upsets, the squad shocks, the records, the goals — delivered fast, with the wit of a friend reacting to the news with you, not a reporter reading it at you.
+    </p>
+    <p>
+      Behind the scenes, it watches the football web continuously, clusters the day's stories, scores them by virality and drama, writes the script in a real Egyptian voice, illustrates each beat with a verified player photo or original brand-styled artwork, and ships the finished short-form video to your feed.
+    </p>
+  </section>
+
+  <section class="section" id="how">
+    <h2>How it <span class="accent">works</span></h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-n">01 · SCRAPE</div>
+        <h3>The football web</h3>
+        <p>Every six hours, HonestStack pulls fresh stories from public sources — major outlets and tier-one journalists.</p>
+      </div>
+      <div class="step">
+        <div class="step-n">02 · SCRIPT</div>
+        <h3>The voice</h3>
+        <p>The day's stories are clustered, scored, and written into a tight 5-to-6 story roundup in colloquial Egyptian Arabic — one breath of news, jokes, and reactions.</p>
+      </div>
+      <div class="step">
+        <div class="step-n">03 · RENDER</div>
+        <h3>The Pharaoh</h3>
+        <p>The mascot narrates. Each story gets a verified real photo or an original brand-styled illustration. A finished short-form MP4 in minutes.</p>
+      </div>
+      <div class="step">
+        <div class="step-n">04 · PUBLISH</div>
+        <h3>Your feed</h3>
+        <p>Out to TikTok, Instagram Reels, and YouTube Shorts. Four videos a day, every day of the tournament.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section voice">
+    <h2>The <span class="accent">voice</span></h2>
+    <p>
+      The host doesn't sound like a news anchor. He sounds like the friend who just saw a clip and grabbed you to react to it.
+    </p>
+    <div class="quote">
+      «سيبك من أي حاجة بتعملها دلوقتي… فودين وبالمر ومجواير برّه كأس العالم! توخيل شطبهم كلهم وضمّ توني بعد سنة قاعد على الدكة. مجواير طلع يقول «أنا مصدوم»، يا عم إحنا اللي مصدومين!»
+      <div class="credit">— a real roundup, opening segment</div>
+    </div>
+  </section>
+
+  <section class="section" id="platforms">
+    <h2>Where to <span class="accent">watch</span></h2>
+    <p>HonestStack publishes natively to each platform — no cross-watermarks, no re-shares.</p>
+    <div class="plat-row">
+      <div class="plat"><span class="dot"></span>TikTok</div>
+      <div class="plat"><span class="dot"></span>Instagram Reels</div>
+      <div class="plat"><span class="dot"></span>YouTube Shorts</div>
+    </div>
+  </section>
+
+  <footer class="foot" id="contact">
+    <div class="foot-wrap">
+      <div class="foot-brand">
+        <img src="/favicon.png" alt="">
+        <div>
+          <div class="wordmark-lg">HonestStack</div>
+          <div class="tag">World Cup 2026 short-form video engine — Egyptian Arabic.</div>
+        </div>
+      </div>
+      <div class="foot-col">
+        <div class="h">Contact</div>
+        <a href="mailto:hello@honeststack.co.uk">hello@honeststack.co.uk</a>
+      </div>
+      <div class="foot-col">
+        <div class="h">Legal</div>
+        <a href="/legal/honeststack-terms.html">Terms of Service</a>
+        <a href="/legal/honeststack-privacy.html">Privacy Policy</a>
+      </div>
+    </div>
+    <div class="copy">
+      <div>&copy; 2026 HonestStack. All rights reserved.</div>
+      <div>honeststack.co.uk</div>
+    </div>
+  </footer>
+</body>
+</html>
