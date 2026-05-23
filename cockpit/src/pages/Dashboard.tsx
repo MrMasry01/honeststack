@@ -4,6 +4,7 @@ import Overview from './Overview'
 import Sources from './Sources'
 import Ideas from './Ideas'
 import Videos from './Videos'
+import Connections from './Connections'
 import Automations from './Automations'
 
 const C = {
@@ -15,13 +16,14 @@ const C = {
   slate: '#94a3b8',
 }
 
-type Tab = 'overview' | 'sources' | 'ideas' | 'videos' | 'automations'
+type Tab = 'overview' | 'sources' | 'ideas' | 'videos' | 'connections' | 'automations'
 
 const NAV_ITEMS: { id: Tab; label: string; icon: string }[] = [
   { id: 'overview', label: 'Overview', icon: '⚡' },
   { id: 'sources', label: 'Sources', icon: '📡' },
   { id: 'ideas', label: 'Ideas', icon: '💡' },
   { id: 'videos', label: 'Videos', icon: '🎬' },
+  { id: 'connections', label: 'Connections', icon: '🔗' },
   { id: 'automations', label: 'Automations', icon: '🤖' },
 ]
 
@@ -197,6 +199,7 @@ export default function Dashboard({ session }: { session: Record<string, any> })
         {tab === 'sources' && <Sources />}
         {tab === 'ideas' && <Ideas />}
         {tab === 'videos' && <Videos />}
+        {tab === 'connections' && <Connections />}
         {tab === 'automations' && <Automations />}
       </main>
     </div>

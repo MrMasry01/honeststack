@@ -83,6 +83,7 @@ function bucketBadge(b: string | null | undefined): string {
 export default function Videos() {
   const [assets, setAssets] = useState<Asset[]>([])
   const [queue, setQueue] = useState<QueueItem[]>([])
+  const [tiktokConnected, setTiktokConnected] = useState(false)
   const [loading, setLoading] = useState(true)
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
   // Use a ref so the polling effect can read the latest count without
@@ -91,7 +92,7 @@ export default function Videos() {
 
   async function fetchData(silent = false) {
     if (!silent) setLoading(true)
-    const [assetsRes, queueRes] = await Promise.all([
+    const [assetsRes, queueRes, accountsRes] = await Promise.all([
       // Join into content_ideas so we can show the hook on each render card.
       supabase
         .from('assets')
@@ -102,10 +103,17 @@ export default function Videos() {
         .from('posts_queue')
         .select('id, platform, publish_at, status, external_url, posted_at, asset_id')
         .order('publish_at', { ascending: false })
-        .limit(30),
+        .limit(200),
+      // Knowing whether TikTok is connected gates the Publish-to-TikTok button.
+      supabase
+        .from('social_accounts')
+        .select('platform')
+        .eq('platform', 'tiktok')
+        .maybeSingle(),
     ])
     setAssets((assetsRes.data as unknown as Asset[]) || [])
     setQueue((queueRes.data as QueueItem[]) || [])
+    setTiktokConnected(!!accountsRes.data)
     setLastRefresh(new Date())
     if (!silent) setLoading(false)
   }
@@ -226,7 +234,18 @@ export default function Videos() {
             gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
             gap: 16
           }}>
-            {done.map(asset => <DoneCard key={asset.id} asset={asset} />)}
+            {done.map(asset => {
+              const queueForAsset = queue.filter(q => q.asset_id === asset.id)
+              return (
+                <DoneCard
+                  key={asset.id}
+                  asset={asset}
+                  queueForAsset={queueForAsset}
+                  tiktokConnected={tiktokConnected}
+                  onPublished={() => fetchData(true)}
+                />
+              )
+            })}
           </div>
         )}
       </section>
@@ -421,10 +440,48 @@ function ErrorCard({ asset, onRetried }: { asset: Asset; onRetried: () => void }
   )
 }
 
-function DoneCard({ asset }: { asset: Asset }) {
+function DoneCard({
+  asset,
+  queueForAsset,
+  tiktokConnected,
+  onPublished,
+}: {
+  asset: Asset
+  queueForAsset: QueueItem[]
+  tiktokConnected: boolean
+  onPublished: () => void
+}) {
   const videoUrl = getVideoUrl(asset.media)
   const thumb = getThumbnail(asset.media)
   const idea = asset.content_ideas
+
+  // Per-platform publish state from posts_queue.
+  const ytQueue = queueForAsset.find(q => q.platform === 'youtube')
+  const ttQueue = queueForAsset.find(q => q.platform === 'tiktok')
+
+  const [publishing, setPublishing] = useState<'youtube' | 'tiktok' | null>(null)
+  const [publishError, setPublishError] = useState<string | null>(null)
+
+  async function publish(platform: 'youtube' | 'tiktok') {
+    setPublishing(platform)
+    setPublishError(null)
+    const fnName = platform === 'youtube' ? 'publish-youtube' : 'publish-tiktok'
+    const { data, error } = await supabase.functions.invoke(fnName, {
+      body: { asset_id: asset.id },
+    })
+    setPublishing(null)
+    if (error) {
+      setPublishError(`${platform}: ${error.message}`)
+      return
+    }
+    const ok = (data as { ok?: boolean } | null)?.ok
+    if (ok === false) {
+      const msg = (data as { error?: string } | null)?.error || 'Publish failed'
+      setPublishError(`${platform}: ${msg}`)
+      return
+    }
+    onPublished()
+  }
 
   return (
     <Card style={{ padding: 0, overflow: 'hidden' }}>
@@ -504,11 +561,141 @@ function DoneCard({ asset }: { asset: Asset }) {
             {asset.hashtags.slice(0, 4).map(h => `#${h}`).join(' ')}
           </p>
         )}
-        <div style={{ fontSize: 11, color: '#4a6080' }}>
+        <div style={{ fontSize: 11, color: '#4a6080', marginBottom: 10 }}>
           {formatDistanceToNow(new Date(asset.created_at), { addSuffix: true })}
+        </div>
+
+        {/* ── Publish actions ─────────────────────────────────── */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
+          paddingTop: 10,
+          borderTop: `1px solid ${C.navyBorder}`,
+        }}>
+          {/* YouTube */}
+          <PublishRow
+            platform="youtube"
+            label="YouTube"
+            color="#FF0000"
+            queue={ytQueue}
+            publishing={publishing === 'youtube'}
+            disabled={publishing !== null}
+            onPublish={() => publish('youtube')}
+          />
+          {/* TikTok */}
+          <PublishRow
+            platform="tiktok"
+            label="TikTok"
+            color="#000000"
+            queue={ttQueue}
+            publishing={publishing === 'tiktok'}
+            disabled={publishing !== null || !tiktokConnected}
+            disabledHint={!tiktokConnected ? 'Connect TikTok in Connections tab' : undefined}
+            onPublish={() => publish('tiktok')}
+          />
+          {publishError && (
+            <div style={{ fontSize: 11, color: C.red, marginTop: 4 }}>
+              {publishError}
+            </div>
+          )}
         </div>
       </div>
     </Card>
+  )
+}
+
+function PublishRow({
+  platform,
+  label,
+  color,
+  queue,
+  publishing,
+  disabled,
+  disabledHint,
+  onPublish,
+}: {
+  platform: 'youtube' | 'tiktok'
+  label: string
+  color: string
+  queue: QueueItem | undefined
+  publishing: boolean
+  disabled: boolean
+  disabledHint?: string
+  onPublish: () => void
+}) {
+  // posts_queue status → row appearance
+  const status = queue?.status
+  const isPosted = status === 'posted'
+  const isPublishing = publishing || status === 'publishing'
+  const isError = status === 'error'
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+      <span style={{
+        width: 24, height: 24, borderRadius: 5,
+        backgroundColor: color, color: '#fff',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 9, fontWeight: 800, flexShrink: 0,
+      }}>
+        {label.slice(0, 2).toUpperCase()}
+      </span>
+      <span style={{ color: '#fff', fontWeight: 500, flex: 1 }}>{label}</span>
+      {isPosted && queue?.external_url ? (
+        <a
+          href={queue.external_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            fontSize: 11, color: C.green, textDecoration: 'none',
+            padding: '4px 10px', borderRadius: 6,
+            border: `1px solid ${C.green}80`,
+            backgroundColor: 'rgba(16,185,129,0.10)',
+            whiteSpace: 'nowrap',
+          }}
+          title={`Posted ${queue.posted_at ? formatDistanceToNow(new Date(queue.posted_at), { addSuffix: true }) : ''}`}
+        >
+          ✓ Posted ↗
+        </a>
+      ) : isPosted ? (
+        <span style={{
+          fontSize: 11, color: C.green,
+          padding: '4px 10px', borderRadius: 6,
+          border: `1px solid ${C.green}80`,
+          backgroundColor: 'rgba(16,185,129,0.10)',
+        }}>
+          ✓ Posted
+        </span>
+      ) : isPublishing ? (
+        <span style={{
+          fontSize: 11, color: C.amber,
+          padding: '4px 10px', borderRadius: 6,
+          border: `1px solid ${C.amber}80`,
+          backgroundColor: 'rgba(245,158,11,0.10)',
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+        }}>
+          <Spinner color={C.amber} /> Publishing
+        </span>
+      ) : (
+        <button
+          onClick={onPublish}
+          disabled={disabled}
+          title={disabledHint}
+          style={{
+            fontSize: 11, fontWeight: 600,
+            padding: '4px 10px', borderRadius: 6,
+            border: `1px solid ${isError ? C.red : C.gold}80`,
+            backgroundColor: isError ? 'rgba(239,68,68,0.10)' : 'rgba(244,194,13,0.10)',
+            color: isError ? C.red : C.gold,
+            cursor: disabled ? 'not-allowed' : 'pointer',
+            opacity: disabled ? 0.5 : 1,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {isError ? `↻ Retry ${platform}` : `▶ Publish to ${label}`}
+        </button>
+      )}
+    </div>
   )
 }
 
