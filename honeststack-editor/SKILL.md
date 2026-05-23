@@ -148,8 +148,13 @@ buckets by recency so each video feels like a fresh catch-up on its window — d
 a story across roundups unless it genuinely developed.
 
 ### Step 6 — Write each roundup script
-**Read `references/tone-guide.md` and follow it** — the Egyptian-Arabic voice and the
-roundup structure are the whole product. For each roundup:
+**Read `references/tone-guide.md` AND `references/voice-cheatsheet.md` and follow both** —
+the Egyptian-Arabic voice and the roundup structure are the whole product. The tone guide
+sets persona (Bassem Youssef sarcasm + Amr Adib crescendo + influencer match-reaction
+energy); the cheatsheet is the mechanical rule book (when to write English names in Latin
+script, punctuation that directs ElevenLabs' pauses, when to add تشكيل).
+
+For each roundup:
 
 - `script_segments` is **5–7 segments — one segment per story**, each **6–12 seconds**
   (`duration_ms` 6000–12000). No separate intro/outro segments — the renderer adds a title
@@ -163,6 +168,13 @@ roundup structure are the whole product. For each roundup:
 - Colloquial Egyptian (عامية), light humour, **no profanity**.
 - State only **verified** facts; hedge anything shaky ("الكلام اللي بيتقال إن...") and set
   `brief.verification` accordingly.
+- **English/Western names in Latin script** — write `Trent Alexander-Arnold` and
+  `Phil Foden` inline in the Arabic line; `eleven_multilingual_v2` switches phonology
+  mid-sentence and reads them correctly. Keep Arabic only for names Egyptians already say
+  in Arabic (صلاح، رونالدو، ميسي، مبابي). Full list in `voice-cheatsheet.md`.
+- **Punctuation directs the voice.** At least 2-3 marks per segment beyond the final
+  mark — `,` for clause pauses, `…` for trailing build-up, `—` for sharp pivots, `?` for
+  rising tone, `!` for the punch. Sparse punctuation = monotone read.
 
 The `hook` column is the roundup's headline (e.g. "أهم 5 أخبار من كأس العالم النهارده").
 
@@ -281,7 +293,13 @@ on-screen RTL caption + TTS narration.
 
 ## Reference files
 
-- `references/tone-guide.md` — the Egyptian-Arabic voice: persona, hook patterns, good vs
-  bad examples, full sample scripts. **Read this before writing or polishing any script.**
+- `references/tone-guide.md` — the Egyptian-Arabic voice: three-icon persona (Bassem
+  Youssef + Amr Adib + modern sports influencers), hook patterns, flow, sample scripts,
+  self-check. **Read this before writing or polishing any script.**
+- `references/voice-cheatsheet.md` — the mechanical rule book that makes ElevenLabs
+  sound native: English-name-in-Latin rule with full keep-Arabic / use-Latin lists,
+  punctuation cheat sheet with TTS effect per mark, تشكيل guidance, per-source
+  catchphrase library (Bassem / Adib / Serry / Mogzz / Nso7y), worked examples. **Read
+  this alongside the tone guide.**
 - `references/schema.md` — `raw_sources` / `content_ideas` table shapes, pending columns,
   jsonb formats, and copy-paste SQL for every query and write above.

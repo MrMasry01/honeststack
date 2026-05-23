@@ -3,16 +3,34 @@
 The voice **is** the product. A correct fact in flat Arabic is a failed video. Read this
 before writing (`morning-brief`) or rewriting (`polish`) any script.
 
-## The voice — young Egyptian football creator
+## The voice — three Egyptian icons blended into one host
 
-The host talks like a **young Egyptian football creator** — picture **Marwan Serry (إرزع)**,
-**Mogzz / إياد المجي**, **Nso7y**. Fast, funny, sharp. Not a reporter reading news — a mate
-who just saw something wild and grabbed you to react to it *with* you. Opinionated, a bit
-cheeky, quick with a joke, always one beat ahead of the viewer.
+The host is a fusion of three Egyptian voice traditions. Pick the dominant pattern per
+segment based on the story type — but it is the *same person* across them all.
 
-**North star:** before you keep any line, ask — *would this sound right coming out of Mogzz
-reacting to a clip, or Serry hyping a result?* If it sounds like a news anchor or a
+1. **Bassem Youssef (الترسو) — sarcastic observational.** Mock-serious flat delivery for
+   absurdity. Catchphrases: *«حلو الكلام ده»* (after something stupid), *«لأ مش معقول»*
+   (mock disbelief), *«تعالى نفهم سوا»* (sarcastic invitation). Use for absurd defeats,
+   predictable mistakes, "I told you so" moments.
+
+2. **Amr Adib (القاهرة اليوم) — emotional crescendo.** Dramatic repetition, drawn-out
+   shock vowels, direct address to the viewer. Catchphrases: *«إيه ده؟ إيه ده؟»*, *«آآآه»*,
+   *«إنت اللي قاعد قدام الموبايل ده»*. Use for shocking stats, big transfers, viral
+   moments.
+
+3. **Modern sports influencers — Marwan Serry (إرزع), Mogzz / إياد المجي, Nso7y — match-reaction
+   energy.** Fast, opinionated, conversational. Catchphrases: *«خد عندك»*, *«اللي حصل ده»*,
+   *«إنت فاهم؟»*, *«وبينا بس»*. Use for match moments, tactical hot takes, squad
+   announcements.
+
+**North star:** before you keep any line, ask — *which of the three would say this, and
+would it sound right coming out of their mouth?* If it sounds like a news anchor or a
 Wikipedia entry, rewrite it.
+
+> See **`references/voice-cheatsheet.md`** for the full per-source catchphrase library and
+> which pattern fits which story type. The cheatsheet also covers the **TTS mechanics**:
+> when to write English names in Latin script vs Arabic, the punctuation rules that direct
+> ElevenLabs' pauses and intonation, and when to add تشكيل. **Read it before writing.**
 
 ## The format — a roundup
 
@@ -70,12 +88,52 @@ it and runs. The host is mid-thought, building — the energy only goes *up*.
   the connector is wrong — fix it.
 - Think relay race: each segment passes the baton, it doesn't start a new race.
 
+## Writing for TTS — punctuation is the secret pacing layer
+
+The host's voice runs through ElevenLabs' `eleven_multilingual_v2`. Punctuation directly
+controls pauses and intonation. Sparse punctuation = flat, rushed read; deliberate
+punctuation = a real person reacting.
+
+- **`,`** ≈ 0.2s pause (group words, clause separators)
+- **`.`** ≈ 0.5s + sentence-end fall
+- **`…`** ≈ 1s dramatic pause — for suspense, "wait for it"
+- **`—`** sharp pivot — for sudden contrast or direction change
+- **`?`** rising intonation — questions, rhetorical or real
+- **`!`** punch + emphasis — reactions, exclamations
+- **`:`** setup-payoff — stat reveals, "the number is:"
+
+Every segment should have at least **2-3 punctuation marks** beyond the final mark. Look
+at Sample A below: ellipsis for the build, period for the shock, exclamation for the
+punch — that's the rhythm. **Never** use `<` `>` brackets, SSML tags, or any markup —
+punctuation IS the markup.
+
+**English / Western names — write them in Latin script directly inside the Arabic line.**
+Multilingual v2 switches phonology mid-sentence when it sees Latin characters. Writing
+"ترينت ألكسندر-أرنولد" makes ElevenLabs read each Arabic letter through Arabic phonology
+and get the name wrong. Writing `Trent Alexander-Arnold` makes it pronounce the English
+name correctly.
+
+Keep Arabic only for names Egyptians say in Arabic naturally — **محمد صلاح**, **رونالدو**,
+**ميسي**, **مبابي**, **نيمار**, **ريال مدريد**, **برشلونة**, **بايرن**, **إنجلترا**,
+**كأس العالم**. Everything else (Foden, Tuchel, Trent, Iniesta, Manchester City, etc.)
+in Latin. Full list and worked examples are in `references/voice-cheatsheet.md`.
+
+**Diacritics (تشكيل)** on tricky words tell ElevenLabs how to read them — *يَعِيّط*,
+*اتحَطّ*, *صَلاح*, *بَتعمل*. Don't over-do them on everyday words, but never leave a
+rare or stress-sensitive word bare.
+
 ## Humour & attitude
 
-Sharp, witty, a satirical edge — Mogzz energy. **Light roasting is good** ("الدفاع كان
-بيرد على التليفون", "المدرب فاكر نفسه في الاستديو"). Irony, comic exaggeration, playful
-disbelief. Punch *up* or punch at the absurdity of the moment — **never** punch down at
-nations, accents, looks, religions. Zero profanity.
+Sharp, witty, a satirical edge — blending **Bassem Youssef's sarcasm**, **Amr Adib's
+crescendo**, and **modern influencer match-reaction speed**. **Light roasting is good**
+("الدفاع كان بيرد على التليفون", "المدرب فاكر نفسه في الاستديو"). Irony, comic
+exaggeration, playful disbelief, dramatic repetition. Punch *up* or punch at the absurdity
+of the moment — **never** punch down at nations, accents, looks, religions. Zero
+profanity.
+
+See `references/voice-cheatsheet.md` for the per-source pattern library and worked
+examples (when to use Bassem's `«حلو الكلام ده»` flat delivery vs Adib's `«إيه ده؟ إيه
+ده؟»` crescendo vs influencer's `«خد عندك»` hot take).
 
 ## Egyptian-context bridging
 
@@ -161,11 +219,21 @@ Good (connected): "إسبانيا كسبت ألمانيا — بس استنى، 
 
 ## Self-check before saving a script
 
-- [ ] Sounds like Serry/Mogzz reacting — not a news anchor.
+**Voice & structure:**
+- [ ] Sounds like Bassem / Adib / Serry / Mogzz reacting — not a news anchor.
 - [ ] عامية شبابية throughout — zero فصحى.
 - [ ] Hook jolts in the first sentence of segment 1.
 - [ ] It FLOWS — every segment after the first opens on a connector; reads as one breath.
 - [ ] Sharp wit / light roasting present; zero red-line content.
 - [ ] 5–7 segments — one per story, each 6–12s. Roundup, not single-story.
+- [ ] Each segment maps to ONE dominant voice pattern (Bassem / Adib / Influencer).
 - [ ] Closes on a specific, divisive, reply-worthy question.
 - [ ] Every stated fact is in the sources — nothing invented.
+
+**TTS mechanics (the `voice-cheatsheet.md` rules):**
+- [ ] Every Western/Latin name written in Latin script — `Phil Foden`, not `فيل فودين`.
+- [ ] Established Arabic names stay Arabic — `صلاح`, `رونالدو`, `ميسي`, `مبابي`.
+- [ ] At least 2-3 punctuation marks per segment beyond the final mark.
+- [ ] At least one `…`, `—`, or `?` somewhere in the script for dynamic pacing.
+- [ ] تشكيل on any rare / stress-sensitive / Egyptian-specific vowel-pattern word.
+- [ ] No `<` `>` brackets, no SSML tags, no literal markup.

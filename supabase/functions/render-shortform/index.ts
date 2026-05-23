@@ -171,7 +171,15 @@ async function generateNarration(
         text,
         model_id: ELEVENLABS_MODEL,
         voice_settings: {
-          stability: 0.45,
+          // Tuned for Egyptian sports creator voice:
+          //   stability 0.40 — slight drop from 0.45 lets the host get more
+          //     expressive on Adib crescendos and Bassem dry-sarcasm flat-lines
+          //     without losing the voice identity.
+          //   similarity_boost 0.75 — keeps the custom voice clone's character.
+          //   style 0.35 — adds performance energy (the "talking to camera"
+          //     intonation). 0 sounds flat; >0.6 starts to over-act.
+          //   use_speaker_boost — sharpens against the reference voice.
+          stability: 0.40,
           similarity_boost: 0.75,
           style: 0.35,
           use_speaker_boost: true,
