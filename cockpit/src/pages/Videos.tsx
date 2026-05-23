@@ -624,11 +624,13 @@ function PublishRow({
   disabledHint?: string
   onPublish: () => void
 }) {
-  // posts_queue status → row appearance
+  // posts_queue status → row appearance.
+  // The DB CHECK constraint allows: pending | publishing | posted | failed.
+  // Treat 'failed' as the error state for the publish row.
   const status = queue?.status
   const isPosted = status === 'posted'
   const isPublishing = publishing || status === 'publishing'
-  const isError = status === 'error'
+  const isError = status === 'failed' || status === 'error'
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>

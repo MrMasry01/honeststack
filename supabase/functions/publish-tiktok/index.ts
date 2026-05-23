@@ -300,13 +300,18 @@ Deno.serve(async (req: Request) => {
   async function markQueueError(message: string) {
     if (!queueId) return;
     await admin.from("posts_queue").update({
-      status: "error", error: message.slice(0, 1000), updated_at: new Date().toISOString(),
+      status: "failed", error: message.slice(0, 1000), updated_at: new Date().toISOString(),
     }).eq("id", queueId);
   }
 
+  // ---- Refresh + publishInit are SYNCHRONOUS (must fit in 60s) ---
+  // The async PUBLISH_COMPLETE poll loop is moved to a background task via
+  // EdgeRuntime.waitUntil — pollPublishStatus can run up to 3 min and we
+  // can't block the HTTP response for that long (Supabase edge timeout).
+  let publishId: string | null = null;
+  let accessToken = account.access_token;
+
   try {
-    // ---- refresh access_token if needed ------------------------
-    let accessToken = account.access_token;
     if (isExpired(account.expires_at) && account.refresh_token) {
       const refreshed = await refreshAccessToken(clientKey, clientSecret, account.refresh_token);
       accessToken = refreshed.access_token;
@@ -318,43 +323,92 @@ Deno.serve(async (req: Request) => {
       }).eq("id", account.id);
     }
 
-    // ---- init the upload (PULL_FROM_URL) -----------------------
     const title = buildTitle(idea, asset);
-    const { publish_id } = await publishInit(accessToken, videoUrl, title);
-    console.log(`[${assetId}] tiktok publish init -> ${publish_id}`);
+    const init = await publishInit(accessToken, videoUrl, title);
+    publishId = init.publish_id;
+    console.log(`[${assetId}] tiktok publish init -> ${publishId}`);
 
-    // ---- poll until terminal -----------------------------------
-    const { status, raw } = await pollPublishStatus(accessToken, publish_id);
-    console.log(`[${assetId}] tiktok terminal status: ${status}`);
-
-    const nowIso = new Date().toISOString();
-    const isSuccess = status === "PUBLISH_COMPLETE" || status === "SEND_TO_USER_INBOX";
-
-    if (isSuccess) {
-      await admin.from("posts_queue").update({
-        status: "posted",
-        external_post_id: publish_id,
-        // Inbox flow doesn't return a public URL — user finishes in app.
-        external_url: null,
-        posted_at: nowIso,
-        updated_at: nowIso,
-        error: null,
-      }).eq("id", queueId!);
-
-      const newMedia = { ...(asset.media ?? {}), tiktok_publish_id: publish_id, tiktok_status: status };
-      await admin.from("assets").update({ media: newMedia }).eq("id", assetId);
-
-      return json({ ok: true, asset_id: assetId, publish_id, status, title });
-    }
-
-    // Failed terminal state.
-    const failMsg = `tiktok publish ${status}: ${JSON.stringify(raw).slice(0, 400)}`;
-    await markQueueError(failMsg);
-    return json({ ok: false, error: failMsg, status, raw }, 500);
+    // Stash the publish_id on the queue row so the background task can find
+    // it AND the cockpit can see it even before terminal.
+    await admin.from("posts_queue").update({
+      external_post_id: publishId,
+      updated_at: new Date().toISOString(),
+    }).eq("id", queueId!);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`[${assetId}] publish-tiktok failed:`, message);
+    console.error(`[${assetId}] publish-tiktok init failed:`, message);
     await markQueueError(message);
-    return json({ ok: false, error: message }, 500);
+    // 200 + ok:false so supabase.functions.invoke surfaces the real message
+    // to the cockpit instead of a generic non-2xx wrapper.
+    return json({ ok: false, error: message, phase: "init" }, 200);
   }
+
+  // ---- Background: poll until terminal, then write back ----------
+  const capturedAccessToken = accessToken;
+  const capturedPublishId = publishId!;
+  const capturedQueueId = queueId!;
+  const capturedAssetId = assetId;
+  const capturedMedia = asset.media ?? {};
+
+  const backgroundPoll = (async () => {
+    try {
+      const { status, raw } = await pollPublishStatus(capturedAccessToken, capturedPublishId);
+      console.log(`[${capturedAssetId}] tiktok terminal status: ${status}`);
+      const nowIso = new Date().toISOString();
+      const isSuccess = status === "PUBLISH_COMPLETE" || status === "SEND_TO_USER_INBOX";
+
+      if (isSuccess) {
+        await admin.from("posts_queue").update({
+          status: "posted",
+          external_post_id: capturedPublishId,
+          external_url: null, // Inbox flow: no public URL until user publishes from app
+          posted_at: nowIso,
+          updated_at: nowIso,
+          error: null,
+        }).eq("id", capturedQueueId);
+
+        await admin.from("assets").update({
+          media: { ...capturedMedia, tiktok_publish_id: capturedPublishId, tiktok_status: status },
+        }).eq("id", capturedAssetId);
+      } else {
+        const failMsg = `tiktok ${status}: ${JSON.stringify(raw).slice(0, 600)}`;
+        await admin.from("posts_queue").update({
+          status: "failed",
+          error: failMsg.slice(0, 1000),
+          updated_at: nowIso,
+        }).eq("id", capturedQueueId);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[${capturedAssetId}] tiktok background poll failed:`, message);
+      try {
+        await admin.from("posts_queue").update({
+          status: "failed",
+          error: `poll: ${message}`.slice(0, 1000),
+          updated_at: new Date().toISOString(),
+        }).eq("id", capturedQueueId);
+      } catch {
+        // Last-resort: nothing we can do if the writeback itself fails.
+      }
+    }
+  })();
+
+  // deno-lint-ignore no-explicit-any
+  const edgeRuntime = (globalThis as any).EdgeRuntime;
+  if (edgeRuntime && typeof edgeRuntime.waitUntil === "function") {
+    edgeRuntime.waitUntil(backgroundPoll);
+  } else {
+    // Local/dev fallback.
+    void backgroundPoll;
+  }
+
+  // Return immediately — the cockpit polls posts_queue to see the final
+  // outcome (posted ✓ or error with the TikTok diagnostic).
+  return json({
+    ok: true,
+    asset_id: assetId,
+    publish_id: publishId,
+    status: "uploading",
+    message: "TikTok accepted the upload, background polling for completion",
+  });
 });

@@ -349,7 +349,7 @@ Deno.serve(async (req: Request) => {
   async function markQueueError(message: string) {
     if (!queueId) return;
     await admin.from("posts_queue").update({
-      status: "error",
+      status: "failed",
       error: message.slice(0, 1000),
       updated_at: new Date().toISOString(),
     }).eq("id", queueId);
