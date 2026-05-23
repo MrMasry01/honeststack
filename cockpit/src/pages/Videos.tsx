@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { Card } from '../components/Card'
 import { Badge } from '../components/Badge'
@@ -9,15 +9,39 @@ const C = {
   navyBorder: '#243a55',
   navyLighter: '#1E3050',
   slate: '#94a3b8',
+  red: '#ef4444',
+  amber: '#f59e0b',
+  green: '#10b981',
+  blue: '#60a5fa',
+}
+
+// The raw status string lives inside the jsonb `media` column. We treat any
+// asset whose media.status is 'processing' or 'rendering' as in-flight.
+type AssetStatus = 'processing' | 'rendering' | 'done' | 'error' | 'unknown'
+
+type AssetMedia = {
+  status?: string
+  job_id?: string
+  video_url?: string
+  error?: string
+  visuals?: string[]
+} & Record<string, unknown>
+
+type IdeaRef = {
+  hook: string | null
+  time_bucket: string | null
 }
 
 type Asset = {
   id: string
+  idea_id: string | null
   kind: string
-  media: Record<string, unknown> | null
+  media: AssetMedia | null
   caption: string | null
   hashtags: string[]
   created_at: string
+  updated_at: string
+  content_ideas: IdeaRef | null
 }
 
 type QueueItem = {
@@ -30,41 +54,100 @@ type QueueItem = {
   asset_id: string | null
 }
 
+function getStatus(a: Asset): AssetStatus {
+  const s = a.media?.status
+  if (s === 'processing' || s === 'rendering' || s === 'done' || s === 'error') return s
+  return 'unknown'
+}
+
+function getVideoUrl(media: AssetMedia | null): string | null {
+  if (!media) return null
+  if (typeof media.video_url === 'string') return media.video_url
+  if (typeof media.url === 'string' && (media.url as string).includes('.mp4')) return media.url as string
+  return null
+}
+
+function getThumbnail(media: AssetMedia | null): string | null {
+  if (!media) return null
+  if (typeof media.thumbnail_url === 'string') return media.thumbnail_url
+  if (typeof media.thumbnail === 'string') return media.thumbnail
+  return null
+}
+
+function bucketBadge(b: string | null | undefined): string {
+  if (!b) return ''
+  // 18-24 is the primetime bucket — call it out.
+  return b === '18-24' ? 'primetime · 18-24' : b
+}
+
 export default function Videos() {
   const [assets, setAssets] = useState<Asset[]>([])
   const [queue, setQueue] = useState<QueueItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
+  // Use a ref so the polling effect can read the latest count without
+  // restarting itself on every render.
+  const hasInflightRef = useRef(false)
+
+  async function fetchData(silent = false) {
+    if (!silent) setLoading(true)
+    const [assetsRes, queueRes] = await Promise.all([
+      // Join into content_ideas so we can show the hook on each render card.
+      supabase
+        .from('assets')
+        .select('id, idea_id, kind, media, caption, hashtags, created_at, updated_at, content_ideas(hook, time_bucket)')
+        .order('updated_at', { ascending: false })
+        .limit(50),
+      supabase
+        .from('posts_queue')
+        .select('id, platform, publish_at, status, external_url, posted_at, asset_id')
+        .order('publish_at', { ascending: false })
+        .limit(30),
+    ])
+    setAssets((assetsRes.data as unknown as Asset[]) || [])
+    setQueue((queueRes.data as QueueItem[]) || [])
+    setLastRefresh(new Date())
+    if (!silent) setLoading(false)
+  }
 
   useEffect(() => {
     fetchData()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function fetchData() {
-    setLoading(true)
-    const [assetsRes, queueRes] = await Promise.all([
-      supabase.from('assets').select('id, kind, media, caption, hashtags, created_at').order('created_at', { ascending: false }).limit(24),
-      supabase.from('posts_queue').select('id, platform, publish_at, status, external_url, posted_at, asset_id').order('publish_at', { ascending: false }).limit(30),
-    ])
-    setAssets((assetsRes.data as Asset[]) || [])
-    setQueue((queueRes.data as QueueItem[]) || [])
-    setLoading(false)
-  }
+  // Auto-refresh: poll every 8s whenever there is at least one in-flight
+  // render. As soon as everything is terminal, stop polling. We re-check
+  // the inflight count by re-querying inside the interval rather than
+  // restarting the interval on every state change.
+  useEffect(() => {
+    hasInflightRef.current = assets.some(a => {
+      const s = getStatus(a)
+      return s === 'processing' || s === 'rendering'
+    })
+  }, [assets])
 
-  function getVideoUrl(media: Record<string, unknown> | null): string | null {
-    if (!media) return null
-    if (typeof media.video_url === 'string') return media.video_url
-    if (typeof media.url === 'string' && (media.url as string).includes('.mp4')) return media.url as string
-    return null
-  }
-
-  function getThumbnail(media: Record<string, unknown> | null): string | null {
-    if (!media) return null
-    if (typeof media.thumbnail_url === 'string') return media.thumbnail_url
-    if (typeof media.thumbnail === 'string') return media.thumbnail
-    return null
-  }
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (hasInflightRef.current) {
+        fetchData(true)
+      }
+    }, 8000)
+    return () => clearInterval(interval)
+  }, [])
 
   if (loading) return <LoadingGrid />
+
+  const inflight = assets.filter(a => {
+    const s = getStatus(a)
+    return s === 'processing' || s === 'rendering'
+  })
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000
+  const recentErrors = assets.filter(a => {
+    return getStatus(a) === 'error' && new Date(a.updated_at).getTime() > cutoff
+  })
+  const done = assets.filter(a => getStatus(a) === 'done')
+
+  const isPolling = inflight.length > 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
@@ -73,141 +156,356 @@ export default function Videos() {
           Videos & Queue
         </h1>
         <p style={{ fontSize: 14, color: C.slate }}>
-          {assets.length} rendered assets · {queue.length} queue items
+          {inflight.length > 0
+            ? <><span style={{ color: C.amber, fontWeight: 600 }}>{inflight.length} rendering</span> · </>
+            : null}
+          {done.length} rendered · {queue.length} queue items
+          {' · '}
+          <span style={{ fontSize: 12, color: '#4a6080' }}>
+            last refresh {formatDistanceToNow(lastRefresh, { addSuffix: true })}
+            {isPolling && <> · auto-refreshing every 8s</>}
+          </span>
+          {' · '}
+          <button
+            onClick={() => fetchData(false)}
+            style={{
+              background: 'none',
+              border: `1px solid ${C.navyBorder}`,
+              color: C.slate,
+              fontSize: 11,
+              padding: '2px 8px',
+              borderRadius: 6,
+              cursor: 'pointer',
+            }}
+          >
+            ↻ refresh
+          </button>
         </p>
       </div>
 
-      {/* Assets grid */}
+      {/* ============================================================
+          IN-FLIGHT RENDERS — shown whenever something is processing/rendering
+          ============================================================ */}
+      {inflight.length > 0 && (
+        <section>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.amber, marginBottom: 14, letterSpacing: '0.5px' }}>
+            🟡 RENDERING NOW
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {inflight.map(a => <InflightCard key={a.id} asset={a} />)}
+          </div>
+        </section>
+      )}
+
+      {/* ============================================================
+          RECENT ERRORS — last 24h failed renders, with error message
+          ============================================================ */}
+      {recentErrors.length > 0 && (
+        <section>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.red, marginBottom: 14, letterSpacing: '0.5px' }}>
+            🔴 RENDER ERRORS (last 24h)
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {recentErrors.map(a => <ErrorCard key={a.id} asset={a} />)}
+          </div>
+        </section>
+      )}
+
+      {/* ============================================================
+          RENDERED ASSETS — finished videos grid (existing behaviour)
+          ============================================================ */}
       <section>
         <div style={{ fontSize: 13, fontWeight: 600, color: C.slate, marginBottom: 14, letterSpacing: '0.5px' }}>
-          RENDERED ASSETS
+          ✅ RENDERED ASSETS
         </div>
-        {assets.length === 0 ? (
-          <EmptyState message="No assets rendered yet. The render pipeline hasn't produced videos." />
+        {done.length === 0 ? (
+          <EmptyState message="No finished renders yet. They'll appear here when the pipeline produces a watchable MP4." />
         ) : (
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
             gap: 16
           }}>
-            {assets.map(asset => {
-              const videoUrl = getVideoUrl(asset.media)
-              const thumb = getThumbnail(asset.media)
-
-              return (
-                <Card key={asset.id} style={{ padding: 0, overflow: 'hidden' }}>
-                  {/* Video or placeholder */}
-                  <div style={{
-                    aspectRatio: '9/16',
-                    backgroundColor: C.navyLighter,
-                    position: 'relative',
-                    overflow: 'hidden',
-                  }}>
-                    {videoUrl ? (
-                      <video
-                        src={videoUrl}
-                        poster={thumb || undefined}
-                        controls
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                    ) : thumb ? (
-                      <img
-                        src={thumb}
-                        alt="Asset thumbnail"
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                      />
-                    ) : (
-                      <div style={{
-                        width: '100%', height: '100%',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 36, color: '#243a55'
-                      }}>
-                        🎬
-                      </div>
-                    )}
-                    <div style={{
-                      position: 'absolute', top: 10, right: 10,
-                    }}>
-                      <Badge label={asset.kind} />
-                    </div>
-                  </div>
-
-                  <div style={{ padding: '12px 14px' }}>
-                    {asset.caption && (
-                      <p style={{
-                        fontSize: 13,
-                        color: '#94a3b8',
-                        marginBottom: 8,
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                        lineHeight: 1.4,
-                      }}>
-                        {asset.caption}
-                      </p>
-                    )}
-                    {asset.hashtags.length > 0 && (
-                      <p style={{ fontSize: 11, color: '#60a5fa', marginBottom: 6 }}>
-                        {asset.hashtags.slice(0, 4).map(h => `#${h}`).join(' ')}
-                      </p>
-                    )}
-                    <div style={{ fontSize: 11, color: '#4a6080' }}>
-                      {formatDistanceToNow(new Date(asset.created_at), { addSuffix: true })}
-                    </div>
-                  </div>
-                </Card>
-              )
-            })}
+            {done.map(asset => <DoneCard key={asset.id} asset={asset} />)}
           </div>
         )}
       </section>
 
-      {/* Posts queue */}
+      {/* ============================================================
+          POSTS QUEUE — what's scheduled to publish (existing)
+          ============================================================ */}
       <section>
         <div style={{ fontSize: 13, fontWeight: 600, color: C.slate, marginBottom: 14, letterSpacing: '0.5px' }}>
-          POSTS QUEUE
+          📤 POSTS QUEUE
         </div>
         {queue.length === 0 ? (
           <EmptyState message="Nothing in the posts queue yet." />
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {queue.map(item => (
-              <Card key={item.id} style={{ padding: '12px 18px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <Badge label={item.platform} type={item.platform} />
-                    <Badge label={item.status} />
-                    {item.publish_at && (
-                      <span style={{ fontSize: 13, color: C.slate }}>
-                        {new Date(item.publish_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                    {item.posted_at && (
-                      <span style={{ fontSize: 12, color: '#4a6080' }}>
-                        Posted {formatDistanceToNow(new Date(item.posted_at), { addSuffix: true })}
-                      </span>
-                    )}
-                    {item.external_url && (
-                      <a
-                        href={item.external_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ fontSize: 12, color: C.gold, textDecoration: 'none' }}
-                      >
-                        View post →
-                      </a>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            ))}
+            {queue.map(item => <QueueCard key={item.id} item={item} />)}
           </div>
         )}
       </section>
     </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-components
+// ─────────────────────────────────────────────────────────────────────────────
+
+function InflightCard({ asset }: { asset: Asset }) {
+  const status = getStatus(asset)
+  const startedAt = new Date(asset.updated_at)
+  const idea = asset.content_ideas
+  const visuals = asset.media?.visuals || []
+  const jobId = asset.media?.job_id
+
+  return (
+    <Card style={{ padding: '14px 18px', borderLeft: `3px solid ${C.amber}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+            <Spinner color={C.amber} />
+            <Badge label={status === 'rendering' ? 'rendering' : 'preparing'} />
+            {idea?.time_bucket && (
+              <span style={{ fontSize: 11, color: C.slate }}>{bucketBadge(idea.time_bucket)}</span>
+            )}
+          </div>
+          <div style={{ fontSize: 14, color: '#fff', marginBottom: 4, fontWeight: 500, lineHeight: 1.4 }} dir="auto">
+            {idea?.hook || <em style={{ color: C.slate }}>(idea metadata not loaded)</em>}
+          </div>
+          {visuals.length > 0 && (
+            <div style={{ fontSize: 11, color: C.slate, marginTop: 4 }}>
+              visuals: {visuals.slice(0, 4).map(v => v.replace(/^wikipedia:/, 'wiki:')).join(' · ')}
+              {visuals.length > 4 && ` · +${visuals.length - 4} more`}
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+          <span style={{ fontSize: 13, color: C.amber, fontWeight: 600 }}>
+            {formatDistanceToNow(startedAt)} elapsed
+          </span>
+          {jobId && (
+            <span style={{ fontSize: 10, color: '#4a6080', fontFamily: 'monospace' }}>
+              job {jobId.slice(0, 8)}
+            </span>
+          )}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function ErrorCard({ asset }: { asset: Asset }) {
+  const idea = asset.content_ideas
+  const err = asset.media?.error || 'No error message recorded'
+  const jobId = asset.media?.job_id
+  const [expanded, setExpanded] = useState(false)
+  const isLong = err.length > 200
+
+  return (
+    <Card style={{ padding: '14px 18px', borderLeft: `3px solid ${C.red}` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, flexWrap: 'wrap' }}>
+            <Badge label="error" />
+            {idea?.time_bucket && (
+              <span style={{ fontSize: 11, color: C.slate }}>{bucketBadge(idea.time_bucket)}</span>
+            )}
+          </div>
+          <div style={{ fontSize: 14, color: '#fff', marginBottom: 4, fontWeight: 500, lineHeight: 1.4 }} dir="auto">
+            {idea?.hook || <em style={{ color: C.slate }}>(idea metadata not loaded)</em>}
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+          <span style={{ fontSize: 12, color: C.slate }}>
+            {formatDistanceToNow(new Date(asset.updated_at), { addSuffix: true })}
+          </span>
+          {jobId && (
+            <span style={{ fontSize: 10, color: '#4a6080', fontFamily: 'monospace' }}>
+              job {jobId.slice(0, 8)}
+            </span>
+          )}
+        </div>
+      </div>
+      <div style={{
+        fontSize: 12,
+        color: C.red,
+        backgroundColor: 'rgba(239, 68, 68, 0.08)',
+        padding: '8px 10px',
+        borderRadius: 6,
+        fontFamily: 'monospace',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+        maxHeight: expanded ? 400 : 80,
+        overflow: 'auto',
+      }}>
+        {expanded || !isLong ? err : err.slice(0, 200) + '…'}
+      </div>
+      {isLong && (
+        <button
+          onClick={() => setExpanded(!expanded)}
+          style={{
+            marginTop: 6,
+            background: 'none',
+            border: 'none',
+            color: C.slate,
+            fontSize: 11,
+            cursor: 'pointer',
+            padding: 0,
+          }}
+        >
+          {expanded ? '↑ collapse' : '↓ show full error'}
+        </button>
+      )}
+    </Card>
+  )
+}
+
+function DoneCard({ asset }: { asset: Asset }) {
+  const videoUrl = getVideoUrl(asset.media)
+  const thumb = getThumbnail(asset.media)
+  const idea = asset.content_ideas
+
+  return (
+    <Card style={{ padding: 0, overflow: 'hidden' }}>
+      <div style={{
+        aspectRatio: '9/16',
+        backgroundColor: C.navyLighter,
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {videoUrl ? (
+          <video
+            src={videoUrl}
+            poster={thumb || undefined}
+            controls
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        ) : thumb ? (
+          <img src={thumb} alt="Asset thumbnail" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (
+          <div style={{
+            width: '100%', height: '100%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 36, color: '#243a55'
+          }}>🎬</div>
+        )}
+        <div style={{ position: 'absolute', top: 10, right: 10 }}>
+          <Badge label={asset.kind} />
+        </div>
+        {idea?.time_bucket && (
+          <div style={{ position: 'absolute', top: 10, left: 10 }}>
+            <span style={{
+              fontSize: 10,
+              color: C.gold,
+              backgroundColor: 'rgba(0,0,0,0.6)',
+              padding: '3px 7px',
+              borderRadius: 4,
+              fontWeight: 600,
+              letterSpacing: 0.4,
+            }}>
+              {bucketBadge(idea.time_bucket)}
+            </span>
+          </div>
+        )}
+      </div>
+      <div style={{ padding: '12px 14px' }}>
+        {idea?.hook && (
+          <p style={{
+            fontSize: 13,
+            color: '#fff',
+            marginBottom: 6,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            lineHeight: 1.4,
+            fontWeight: 500,
+          }} dir="auto">
+            {idea.hook}
+          </p>
+        )}
+        {asset.caption && !idea?.hook && (
+          <p style={{
+            fontSize: 13,
+            color: C.slate,
+            marginBottom: 8,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            lineHeight: 1.4,
+          }}>
+            {asset.caption}
+          </p>
+        )}
+        {asset.hashtags.length > 0 && (
+          <p style={{ fontSize: 11, color: C.blue, marginBottom: 6 }}>
+            {asset.hashtags.slice(0, 4).map(h => `#${h}`).join(' ')}
+          </p>
+        )}
+        <div style={{ fontSize: 11, color: '#4a6080' }}>
+          {formatDistanceToNow(new Date(asset.created_at), { addSuffix: true })}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function QueueCard({ item }: { item: QueueItem }) {
+  return (
+    <Card style={{ padding: '12px 18px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Badge label={item.platform} type={item.platform} />
+          <Badge label={item.status} />
+          {item.publish_at && (
+            <span style={{ fontSize: 13, color: C.slate }}>
+              {new Date(item.publish_at).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' })}
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          {item.posted_at && (
+            <span style={{ fontSize: 12, color: '#4a6080' }}>
+              Posted {formatDistanceToNow(new Date(item.posted_at), { addSuffix: true })}
+            </span>
+          )}
+          {item.external_url && (
+            <a
+              href={item.external_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ fontSize: 12, color: C.gold, textDecoration: 'none' }}
+            >
+              View post →
+            </a>
+          )}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function Spinner({ color }: { color: string }) {
+  return (
+    <span
+      aria-hidden
+      style={{
+        display: 'inline-block',
+        width: 12,
+        height: 12,
+        border: `2px solid ${color}`,
+        borderTopColor: 'transparent',
+        borderRadius: '50%',
+        animation: 'hs-render-spin 0.7s linear infinite',
+        flexShrink: 0,
+      }}
+    >
+      <style>{`@keyframes hs-render-spin { to { transform: rotate(360deg) } }`}</style>
+    </span>
   )
 }
 
