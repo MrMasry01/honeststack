@@ -6,10 +6,13 @@
 // Orchestrates:
 //   1. ElevenLabs TTS  -> host narration MP3 (storage assets/audio)
 //   2. Per-segment backdrop visual, resolved in priority order:
-//        (a) an explicit http(s) URL in the segment prompt,
-//        (b) a REAL source photo — looked up from the content_idea's
-//            brief.source_ids -> raw_sources.media_urls,
-//        (c) a Gemini-generated image from the segment prompt,
+//        (a) an explicit http(s) URL in the segment prompt — the editorial
+//            brain puts the moment photo URL from tier-1 journalists' tweets
+//            here directly (the dominant path now after the visual-priority
+//            patch — see honeststack-editor/SKILL.md Step 7),
+//        (b) "person:<Full Name>" -> a real Wikipedia headshot, vision-verified
+//            by Gemini before use (so a Foden segment never gets Maguire's face),
+//        (c) a Gemini-generated image from any other (scene) prompt,
 //        (d) a Pexels stock photo as a last-resort fallback.
 //      (storage assets/images)
 //   3. Remotion render service -> the MP4 (fire-and-forget)

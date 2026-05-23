@@ -15,8 +15,8 @@ description: >-
 
 This skill is the editorial loop for **HonestStack**, an automated engine that publishes
 **4 short-form videos per day** about the FIFA World Cup 2026. Each video is hosted by a
-stylised 2D animated Egyptian host speaking **colloquial Egyptian Arabic** (عامية مصرية)
-in a casual, funny tone.
+**fixed Egyptian Pharaoh mascot** (bundled with the Remotion project — identical in every
+video) speaking **colloquial Egyptian Arabic** (عامية مصرية) in a casual, funny tone.
 
 Your job here is to turn raw scraped football news (`raw_sources`) into polished, verified,
 ready-to-render video scripts (`content_ideas`). You are the writer and the fact-checker —

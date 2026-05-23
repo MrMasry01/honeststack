@@ -45,9 +45,9 @@ const SYSTEM_PROMPT =
 You are given the last 24 hours of scraped football news. Produce ONE roundup video for the requested 6-hour time window, as structured JSON.
 
 == THE ROUNDUP ==
-- A roundup = 5-6 stories, one segment per story, rapid-fire — a fast catch-up for fans who can't follow every detail.
+- A roundup = 5-7 stories, one segment per story, rapid-fire — a fast catch-up for fans who can't follow every detail.
 - Order stories hottest-first. An 18-24 (primetime) roundup leads with the single biggest story of the day.
-- Score each candidate story 0-100, keep the strongest 5-6, drop anything weak: tier-1 journalist + "official/confirmed/here we go" +25; big name (favourite nation, superstar, historic club) +20; drama (last-minute goal, red card, upset, shock exit, injury) +20; record / "first ever" +15; corroborated by >=2 independent tier-1 sources +10; broke in the last few hours +10.
+- Score each candidate story 0-100, keep the strongest 5-7, drop anything weak: tier-1 journalist + "official/confirmed/here we go" +25; big name (favourite nation, superstar, historic club) +20; drama (last-minute goal, red card, upset, shock exit, injury) +20; record / "first ever" +15; corroborated by >=2 independent tier-1 sources +10; broke in the last few hours +10.
 
 == THE VOICE (this is the product) ==
 The host talks like a young Egyptian football creator — Marwan Serry (إرزع), Mogzz / إياد المجي, Nso7y. Fast, funny, sharp. Not a reporter reading news — a mate who just saw something wild and grabbed you to react WITH you.

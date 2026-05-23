@@ -17,7 +17,7 @@ Wikipedia entry, rewrite it.
 ## The format — a roundup
 
 Every video is a **roundup**: a fast catch-up on the World Cup for fans who can't follow
-every detail. Not one story told slowly — **5–6 stories, rapid-fire, one per segment.**
+every detail. Not one story told slowly — **5–7 stories, rapid-fire, one per segment.**
 
 - `script_segments` = **5–7 segments, one story each.** The renderer adds the title card
   and the outro card; the segments are pure content.
@@ -41,7 +41,7 @@ every detail. Not one story told slowly — **5–6 stories, rapid-fire, one per
    this is the single biggest thing.
 4. **Sharp, witty, a little savage.** Light roasting and irony are the whole flavour. No
    profanity though — the wit does the work, not shock.
-5. **It's a roundup.** Each video summarises 5–6 stories, one segment per story — see
+5. **It's a roundup.** Each video summarises 5–7 stories, one segment per story — see
    "The format" above. Each beat still gets full energy; rapid-fire, never flat.
 6. **Facts only.** Never invent a scoreline, stat, quote, or detail. If the sources don't
    give it, the script doesn't say it. Unverified → hedge ("الكلام اللي بيتقال") or drop.
@@ -102,16 +102,21 @@ you'd find in a newspaper. Numbers and everyday words always in the Egyptian for
 - No profanity, no insults, no sexual content.
 - No mocking countries, accents, religions, or appearances.
 - No politics, no sectarian references.
-- No real broadcast match footage in `image_prompt_or_url` — stock, AI, or copyright-safe
-  press photos only.
+- No real broadcast match footage in `image_prompt_or_url`. Allowed sources: photos posted
+  by tier-1 football journalists on Twitter/X (Fabrizio Romano, David Ornstein, the
+  beat-reporters whose tweets you scraped — the de-facto standard for short-form sports
+  content); Wikipedia/Wikimedia images; stock photography; AI-generated scenes from your
+  own prompt; and copyright-safe press images. Never raw broadcaster match frames.
 - No invented specifics — no fabricated scoreline, stat, quote, date, or name.
 
 ---
 
 ## Full sample scripts — the target quality
 
-Each is a `script_segments` array's worth of `text`. Notice the **connectors** and how each
-one flows into the next.
+These samples illustrate the **voice, hook, and connector flow** — not the segment count.
+The real format is **5–7 segments per roundup, one per story**. The 4-segment samples below
+are single-story deep-dives; for a roundup, you'd compress each story into one segment and
+chain 5–7 of them with connectors. Notice in each sample how each line flows into the next.
 
 ### Sample A — a big upset
 
@@ -161,6 +166,6 @@ Good (connected): "إسبانيا كسبت ألمانيا — بس استنى، 
 - [ ] Hook jolts in the first sentence of segment 1.
 - [ ] It FLOWS — every segment after the first opens on a connector; reads as one breath.
 - [ ] Sharp wit / light roasting present; zero red-line content.
-- [ ] 3–5 segments, each 6–12s.
+- [ ] 5–7 segments — one per story, each 6–12s. Roundup, not single-story.
 - [ ] Closes on a specific, divisive, reply-worthy question.
 - [ ] Every stated fact is in the sources — nothing invented.

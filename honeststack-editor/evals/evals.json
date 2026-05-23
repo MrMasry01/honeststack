@@ -6,7 +6,7 @@
       "id": 0,
       "name": "morning-brief",
       "prompt": "morning brief time — supabase mcp isn't hooked up yet so use the dump in fixtures/morning-brief-raw-sources.json as the last 24h of raw_sources. my owner_id is 00000000-0000-0000-0000-000000000001. dedupe it, cluster it, score it, write me the day's video scripts in masry (egyptian arabic), and save the content_ideas rows you'd insert to a JSON file called content_ideas.json so i can eyeball them. then show me a summary table.",
-      "expected_output": "A content_ideas.json file with one row per chosen story (up to 4, weakest story dropped). Each row: status='draft', language='ar-EG', format='short_video', a distinct time_bucket, an Egyptian-Arabic hook, a script_segments array of 3-5 segments (each duration_ms 6000-12000, text in colloquial Egyptian Arabic, last segment a question), and a brief jsonb. Exact-duplicate rows deduped. A summary table in the reply.",
+      "expected_output": "A content_ideas.json file with one row per chosen time_bucket (up to 4 roundups). Each row is a roundup covering 5-7 stories: status='draft', language='ar-EG', format='short_video', a distinct time_bucket, an Egyptian-Arabic hook, a script_segments array of 5-7 segments (each duration_ms 6000-12000, text in colloquial Egyptian Arabic, last segment a question), and a brief jsonb. Exact-duplicate rows deduped. A summary table in the reply.",
       "files": ["evals/fixtures/morning-brief-raw-sources.json"],
       "expectations": [
         "content_ideas.json exists and parses as a JSON array of 3-4 video ideas (the weak 'wi-fi / gate times' story excluded).",
@@ -14,7 +14,7 @@
         "No idea is built from the low-value 'stadium wi-fi / gate times' source item.",
         "Every idea has status='draft', language='ar-EG', and format='short_video'.",
         "Every idea has a distinct time_bucket, each one of '00-06','06-12','12-18','18-24'.",
-        "Every script_segments array has 3-5 segments, and every segment duration_ms is between 6000 and 12000.",
+        "Every script_segments array has 5-7 segments (one per story in the roundup), and every segment duration_ms is between 6000 and 12000.",
         "Every script segment's text is written in Arabic script.",
         "Each script's final segment ends with a question mark (؟ or ?) as a comment-bait CTA.",
         "The most viral story — the Brazil 3-0 upset (3 tier-1 sources + a historic stat) — is assigned the '18-24' primetime bucket.",

@@ -161,17 +161,23 @@ Update `hook` too if the polished hook changed. Do not change `status`.
   },
   {
     "text": "منتخب السامبا اترص قدام مرماه طول الماتش والمدرب ملقاش حل.",
-    "image_prompt_or_url": "Stylised 2D illustration, brand colours, a samba-yellow football team defending desperately around their goal, dramatic stadium lighting, vertical 9:16",
+    "image_prompt_or_url": "https://pbs.twimg.com/media/realphoto-defenders.jpg",
     "duration_ms": 9000
   }
 ]
 ```
 
 - 5–7 segments — one per story. Each `duration_ms` 6000–12000.
-- `image_prompt_or_url` takes three forms: `person:<Full Name>` → the renderer fetches a
-  real Wikipedia photo and vision-verifies the face (use for every real named person); a
-  value starting with `http` → a copyright-safe real photo URL used as-is; anything else →
-  an English AI prompt for a scene (`google/gemini-3.1-flash-image-preview`).
+- `image_prompt_or_url` takes three forms, in this STRICT priority order:
+  1. **A real photo URL** (starts with `http`) — **preferred for ≥80% of segments**. Use the
+     `media_urls` entry from a contributing `raw_sources` row whose `content` describes the
+     moment the segment narrates. Tier-1 journalist tweets almost always attach the photo.
+  2. **`person:<Full Name>`** — the renderer fetches a real Wikipedia headshot and
+     vision-verifies the face. Use ONLY when no source photo exists AND the segment is a
+     pure identity beat. Static and visually flat — sparing use.
+  3. **An English AI scene prompt** — last resort. Name real clubs/nations and the actual
+     moment concretely. Never write "stylised", "brand colours", "Nano Banana", or "2D" —
+     the renderer handles style.
 - `text` is colloquial Egyptian Arabic — the renderer uses it for both the RTL caption and
   the ElevenLabs TTS narration.
 
@@ -190,7 +196,6 @@ A roundup covers several stories, so the brief lists them all:
     "Mohamed Salah confirmed as Egypt captain",
     "Cristiano Ronaldo's Al Nassr future in doubt"
   ],
-  "visual_notes": "Real people use person:<Name> (verified photo); scenes use brand-style AI prompts. No real broadcast footage.",
   "cta": "أنهي خبر فيهم صدمك أكتر؟"
 }
 ```
