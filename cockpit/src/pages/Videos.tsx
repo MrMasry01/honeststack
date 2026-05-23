@@ -206,7 +206,7 @@ export default function Videos() {
             🔴 RENDER ERRORS (last 24h)
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {recentErrors.map(a => <ErrorCard key={a.id} asset={a} />)}
+            {recentErrors.map(a => <ErrorCard key={a.id} asset={a} onRetried={() => fetchData(true)} />)}
           </div>
         </section>
       )}
@@ -297,12 +297,43 @@ function InflightCard({ asset }: { asset: Asset }) {
   )
 }
 
-function ErrorCard({ asset }: { asset: Asset }) {
+function ErrorCard({ asset, onRetried }: { asset: Asset; onRetried: () => void }) {
   const idea = asset.content_ideas
   const err = asset.media?.error || 'No error message recorded'
   const jobId = asset.media?.job_id
   const [expanded, setExpanded] = useState(false)
+  const [retrying, setRetrying] = useState(false)
+  const [retryError, setRetryError] = useState<string | null>(null)
+  const [retrySuccess, setRetrySuccess] = useState(false)
   const isLong = err.length > 200
+  const canRetry = !!asset.idea_id
+
+  async function handleRetry() {
+    if (!asset.idea_id) return
+    setRetrying(true)
+    setRetryError(null)
+    setRetrySuccess(false)
+    // Calls retry-render edge function. The Supabase JS client automatically
+    // attaches the logged-in user's JWT, which retry-render uses to verify
+    // ownership of the idea before proxying to render-shortform.
+    const { data, error } = await supabase.functions.invoke('retry-render', {
+      body: { idea_id: asset.idea_id },
+    })
+    setRetrying(false)
+    if (error) {
+      setRetryError(error.message)
+      return
+    }
+    const ok = (data as { ok?: boolean } | null)?.ok
+    if (ok === false) {
+      const msg = (data as { error?: string } | null)?.error || 'Retry was rejected'
+      setRetryError(msg)
+      return
+    }
+    setRetrySuccess(true)
+    // Parent's polling will pick up the new in-flight state in a few seconds.
+    onRetried()
+  }
 
   return (
     <Card style={{ padding: '14px 18px', borderLeft: `3px solid ${C.red}` }}>
@@ -318,7 +349,7 @@ function ErrorCard({ asset }: { asset: Asset }) {
             {idea?.hook || <em style={{ color: C.slate }}>(idea metadata not loaded)</em>}
           </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
           <span style={{ fontSize: 12, color: C.slate }}>
             {formatDistanceToNow(new Date(asset.updated_at), { addSuffix: true })}
           </span>
@@ -326,6 +357,27 @@ function ErrorCard({ asset }: { asset: Asset }) {
             <span style={{ fontSize: 10, color: '#4a6080', fontFamily: 'monospace' }}>
               job {jobId.slice(0, 8)}
             </span>
+          )}
+          {canRetry && (
+            <button
+              onClick={handleRetry}
+              disabled={retrying || retrySuccess}
+              style={{
+                padding: '5px 10px',
+                borderRadius: 6,
+                border: `1px solid ${retrySuccess ? C.green : C.red}80`,
+                backgroundColor: retrySuccess ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                color: retrySuccess ? C.green : C.red,
+                cursor: (retrying || retrySuccess) ? 'not-allowed' : 'pointer',
+                fontSize: 11,
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+                opacity: retrying ? 0.7 : 1,
+              }}
+              title="Re-run the render pipeline for this idea"
+            >
+              {retrying ? 'Retrying…' : retrySuccess ? '✓ Render queued' : '↻ Retry render'}
+            </button>
           )}
         </div>
       </div>
@@ -343,22 +395,28 @@ function ErrorCard({ asset }: { asset: Asset }) {
       }}>
         {expanded || !isLong ? err : err.slice(0, 200) + '…'}
       </div>
-      {isLong && (
-        <button
-          onClick={() => setExpanded(!expanded)}
-          style={{
-            marginTop: 6,
-            background: 'none',
-            border: 'none',
-            color: C.slate,
-            fontSize: 11,
-            cursor: 'pointer',
-            padding: 0,
-          }}
-        >
-          {expanded ? '↑ collapse' : '↓ show full error'}
-        </button>
-      )}
+      <div style={{ display: 'flex', gap: 12, marginTop: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+        {isLong && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: C.slate,
+              fontSize: 11,
+              cursor: 'pointer',
+              padding: 0,
+            }}
+          >
+            {expanded ? '↑ collapse' : '↓ show full error'}
+          </button>
+        )}
+        {retryError && (
+          <span style={{ fontSize: 11, color: C.red }}>
+            Retry failed: {retryError}
+          </span>
+        )}
+      </div>
     </Card>
   )
 }
