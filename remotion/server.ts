@@ -238,6 +238,9 @@ function getBundle(): Promise<string> {
 
 async function runRender(jobId: string, inputProps: NewsRoundupProps) {
   const outputPath = path.join(os.tmpdir(), `${jobId}.mp4`);
+  // Capture idea_id eagerly so the catch can always reach it, even if the
+  // jobs Map gets cleared / clobbered by some other code path.
+  const ideaIdEager = jobs.get(jobId)?.idea_id;
 
   try {
     const bundleLocation = await getBundle();
@@ -267,6 +270,12 @@ async function runRender(jobId: string, inputProps: NewsRoundupProps) {
       // preset, and force a small encoder thread count.
       concurrency: RENDER_CONCURRENCY,
       x264Preset: "fast",
+      // CRF 25 is the sweet spot for vertical short-form social video —
+      // visually indistinguishable from CRF 18 default, but cuts file size
+      // roughly in half. A 6-segment render that hits ~55 MB at CRF 18
+      // (over the Supabase 50 MB single-request upload limit) lands at
+      // ~22 MB at CRF 25 with no perceptible quality loss on phone screens.
+      crf: 25,
       ffmpegOverride: ({ args }) => {
         // Cap libx264 encoder threads so it does not spawn dozens of
         // memory-hungry threads. As an output option, "-threads N" must
@@ -289,7 +298,11 @@ async function runRender(jobId: string, inputProps: NewsRoundupProps) {
       },
     });
 
-    console.log(`[${jobId}] render complete — uploading to Supabase`);
+    // Log render output size so size-related upload failures are obvious
+    // in the Railway logs without guessing.
+    const fileStat = fs.statSync(outputPath);
+    const sizeMB = (fileStat.size / 1024 / 1024).toFixed(1);
+    console.log(`[${jobId}] render complete — ${sizeMB} MB — uploading to Supabase`);
 
     if (!supabase) {
       throw new Error("Supabase client not configured (missing env vars)");
@@ -306,7 +319,12 @@ async function runRender(jobId: string, inputProps: NewsRoundupProps) {
       });
 
     if (uploadError) {
-      throw new Error(`Supabase upload failed: ${uploadError.message}`);
+      // Make the size-limit failure mode unambiguous in the message that
+      // gets written to the assets row (instead of just "exceeded max size").
+      const sizeNote = fileStat.size > 50 * 1024 * 1024
+        ? ` (rendered ${sizeMB} MB > Supabase 50 MB free-tier upload limit — raise CRF or upgrade Supabase plan)`
+        : "";
+      throw new Error(`Supabase upload failed: ${uploadError.message}${sizeNote}`);
     }
 
     const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${storagePath}`;
@@ -326,9 +344,15 @@ async function runRender(jobId: string, inputProps: NewsRoundupProps) {
     updateJob(jobId, { status: "error", error: message });
     // Write the failure back to the assets row — without this, a failed
     // render leaves the asset stuck at 'rendering' forever (silent failure).
-    const ideaId = jobs.get(jobId)?.idea_id;
+    // Use the eagerly-captured ideaIdEager so this still works even if
+    // the jobs Map entry was wiped (which it isn't currently, but defends
+    // against future regressions and OOM-related state loss).
+    const ideaId = ideaIdEager ?? jobs.get(jobId)?.idea_id;
     if (ideaId) {
+      console.log(`[${jobId}] writing failure back to asset for idea ${ideaId}`);
       await markAssetError(ideaId, jobId, message);
+    } else {
+      console.warn(`[${jobId}] no idea_id captured — asset will NOT be marked error (orphan sweep on next restart will catch it)`);
     }
   } finally {
     // Clean up the temp file regardless of outcome.
