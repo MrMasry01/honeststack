@@ -19,6 +19,10 @@ const MIME = {
   '.woff2':'font/woff2',
   '.woff': 'font/woff',
   '.ttf':  'font/ttf',
+  // text/plain so TikTok's URL-prefix-verification scraper reads the
+  // content correctly (otherwise it gets application/octet-stream and
+  // may not match its expected verifier signature).
+  '.txt':  'text/plain; charset=utf-8',
 }
 
 async function serve(req, res) {
