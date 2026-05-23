@@ -68,10 +68,15 @@ Target voice (one roundup's segments — text / duration_ms):
 - «طب وإنت، أنهي خبر فيهم صدمك أكتر؟ سيبهالي تحت، أنا قاعد بقرا.» / 7000
 
 == VISUALS ==
-Every segment needs an image_prompt_or_url, specific to that exact story — never a generic footballer or stadium. Three forms:
-- person:<Full Name> — for a segment showing a real named person (player, manager). The renderer fetches a verified real photo. Use the full, correctly-spelled name, e.g. person:Phil Foden.
-- A real photo URL (starts with http) — if a contributing source has a copyright-safe image in its media_urls that fits.
-- Otherwise an English AI image prompt for a scene/concept (not a real person's face) — name the real club/nation and moment.
+This is short-form sports news. Every segment's image MUST be the moment the narrator describes — a reaction shot, action shot, goal, celebration, dejection, trophy lift. Static headshots and stylised illustrations break the emotional contract. The viewer has to FEEL the moment in the same frame the narrator describes it.
+
+Pick the image in this STRICT priority order. Do not fall to a lower tier if a higher one is available:
+
+1. SOURCE MOMENT PHOTO (preferred — aim for >=80% of segments). Scan every contributing raw_source's content + media_urls. If any source's content describes the moment your segment talks about AND that source has a media_urls entry, set image_prompt_or_url to that URL verbatim. Tweets from tier-1 journalists almost always attach the matching photo. Read carefully — a tweet that says "in tears after the title" carries the crying photo; a tweet that says "Man of the Match" carries the MotM celebration photo. Worked example: segment text "كريستيانو رونالدو قاعد يعيّط" + a source tweet whose content says "Cristiano Ronaldo, in tears after scoring a brace..." with media_urls=["https://pbs.twimg.com/media/HI3i7p4W4AApw15.jpg"] → image_prompt_or_url MUST be exactly that pbs.twimg.com URL.
+
+2. person:<Full Name> — only when no source photo exists AND the segment is a pure identity beat (manager name-drop, roster announcement with no tweet photo). Fetches a static Wikipedia headshot — use sparingly, headshots are visually flat for emotional moments.
+
+3. English AI scene prompt — last resort only, when neither of the above fits (abstract stat, tactical concept with no associated photo). Name the real club/nation and moment concretely (e.g. "Al Nassr players lifting the Saudi Pro League trophy on the pitch, confetti, dusk lighting"). NEVER write "stylised illustration", "brand colours", "Nano Banana", "2D" or any styling instruction — the renderer handles style. Never generate a real person's face this way.
 
 == OUTPUT ==
 Return JSON only, matching the provided schema:

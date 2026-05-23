@@ -167,26 +167,41 @@ roundup structure are the whole product. For each roundup:
 The `hook` column is the roundup's headline (e.g. "أهم 5 أخبار من كأس العالم النهارده").
 
 ### Step 7 — Plan each segment's visual
-Every segment needs an `image_prompt_or_url`. The visual must be **specific to this exact
-story** — never a generic stock-style footballer or anonymous stadium. The renderer reads
-three forms:
+This is short-form **sports news**. Every segment's image MUST be the moment the narrator
+describes — a reaction shot, action shot, goal, celebration, dejection, trophy lift.
+Static headshots and stylised illustrations break the emotional contract. The viewer has
+to FEEL the moment in the same frame the narrator describes it.
 
-- **`person:<Full Name>`** — use for any segment showing a **real named person** (player,
-  manager, journalist). The renderer fetches that person's real photo from Wikipedia and
-  **vision-verifies the face is correct** before using it. This is the only safe way to
-  show a real person — it is what stops a Foden segment getting Maguire's face. Always use
-  the full, correctly-spelled name: `person:Phil Foden`, `person:Harry Maguire`,
-  `person:Thomas Tuchel`.
-- **A real photo URL** — a value starting with `http`. If a contributing `raw_sources`
-  row has a copyright-safe image in `media_urls` (the journalist's own photo, a press
-  image) that fits the segment, use that URL directly.
-- **An AI image prompt** — anything else. Use for scenes and concepts, *not* a real
-  person's face (AI cannot reliably reproduce a real likeness). Name the actual
-  club/nation and the real moment; recreate it in brand style. Never a generic player or
-  stadium, never real broadcast match footage.
+Pick the image in this **STRICT priority order**. Do not fall to a lower tier if a
+higher one is available:
 
-For any segment about a specific person, **always use `person:<Full Name>`**. See
-`references/schema.md` for the `script_segments` shape.
+1. **SOURCE MOMENT PHOTO (preferred — aim for ≥80% of segments).** Scan every
+   contributing `raw_sources` row's `content` + `media_urls`. If any source's content
+   describes the moment your segment talks about AND that source has a `media_urls`
+   entry, set `image_prompt_or_url` to that URL verbatim. Tweets from tier-1 journalists
+   almost always attach the matching photo. Read carefully — a tweet that says
+   *"in tears after the title"* carries the crying photo; a tweet that says
+   *"Man of the Match"* carries the celebration photo.
+   **Worked example:** segment text *«كريستيانو رونالدو قاعد يعيّط»* + a source tweet
+   whose content says *"Cristiano Ronaldo, in tears after scoring a brace…"* with
+   `media_urls=["https://pbs.twimg.com/media/HI3i7p4W4AApw15.jpg"]` →
+   `image_prompt_or_url` MUST be exactly that `pbs.twimg.com` URL.
+
+2. **`person:<Full Name>`** — only when no source photo exists AND the segment is a pure
+   identity beat (manager name-drop, roster announcement with no tweet photo). Fetches a
+   static Wikipedia headshot, vision-verified. Use **sparingly** — headshots are
+   visually flat for emotional moments. Always use the full, correctly-spelled name:
+   `person:Phil Foden`, `person:Thomas Tuchel`.
+
+3. **English AI scene prompt** — last resort only, when neither of the above fits (an
+   abstract stat, a tactical concept with no associated photo). Name the real
+   club/nation and the moment concretely (e.g. *"Al Nassr players lifting the Saudi Pro
+   League trophy on the pitch, confetti, dusk lighting"*). **NEVER** write *"stylised
+   illustration"*, *"brand colours"*, *"Nano Banana"*, *"2D"* or any styling
+   instruction — the renderer handles style. Never generate a real person's face this
+   way.
+
+See `references/schema.md` for the `script_segments` shape.
 
 ### Step 8 — Insert as drafts
 Insert one `content_ideas` row per roundup with `status='draft'`, `language='ar-EG'`,
@@ -240,8 +255,9 @@ Decide whether a claim is solid enough to put in a video.
    - **Never** set `verified = true` from the source alone or a single corroboration.
 4. **Save**: `UPDATE raw_sources SET verified=..., verification_sources=... WHERE
    id=<source_id> AND owner_id=...`.
-5. **Copyright flag:** while checking, note whether the source's media is safe to reuse. If
-   not, say so — downstream the visual must be recreated with Nano Banana, not reused.
+5. **Copyright flag:** while checking, note whether the source's media is safe to reuse.
+   If not, flag the URL — downstream the renderer will fall back to a fresh AI scene
+   prompt instead of reusing it.
 
 ---
 
