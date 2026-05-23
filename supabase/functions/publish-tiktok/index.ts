@@ -111,17 +111,23 @@ function buildTitle(idea: Idea | null, asset: Asset): string {
   return raw.length > 150 ? raw.slice(0, 147) + "..." : raw;
 }
 
+// FILE_UPLOAD init. Returns publish_id + upload_url. We don't use
+// PULL_FROM_URL because that requires the source domain to be verified
+// in the TikTok Developer Portal — and we don't own supabase.co.
 async function publishInit(
   accessToken: string,
-  videoUrl: string,
+  videoSize: number,
   title: string,
-): Promise<{ publish_id: string }> {
+): Promise<{ publish_id: string; upload_url: string }> {
+  // Single-chunk upload: TikTok requires chunk_size = video_size when
+  // total_chunk_count = 1. Our rendered MP4s are 15-30MB, well within
+  // the 64MB single-chunk ceiling.
   const body = {
     post_info: {
       title,
-      // Sandbox / Inbox flow: video lands as private draft in user's
-      // TikTok inbox. They tap to publish from the TikTok app.
-      // For direct publish (requires audit approval), switch to
+      // Sandbox / Inbox flow: video lands as a private draft in the
+      // user's TikTok inbox. They tap to publish from the TikTok app.
+      // For direct publish (requires app audit approval), switch to
       // /v2/post/publish/video/init/ with post_mode = "DIRECT_POST".
       privacy_level: "SELF_ONLY",
       disable_duet: false,
@@ -129,8 +135,10 @@ async function publishInit(
       disable_comment: false,
     },
     source_info: {
-      source: "PULL_FROM_URL",
-      video_url: videoUrl,
+      source: "FILE_UPLOAD",
+      video_size: videoSize,
+      chunk_size: videoSize,
+      total_chunk_count: 1,
     },
   };
 
@@ -145,15 +153,31 @@ async function publishInit(
   });
 
   const data = await res.json();
-  if (!res.ok || data.error?.code !== "ok" && !data.data?.publish_id) {
+  const publishId = data?.data?.publish_id as string | undefined;
+  const uploadUrl = data?.data?.upload_url as string | undefined;
+  if (!res.ok || !publishId || !uploadUrl) {
     throw new Error(
       `tiktok publish init ${res.status}: ${JSON.stringify(data).slice(0, 400)}`,
     );
   }
+  return { publish_id: publishId, upload_url: uploadUrl };
+}
 
-  const publishId = data?.data?.publish_id;
-  if (!publishId) throw new Error("tiktok publish init returned no publish_id");
-  return { publish_id: publishId };
+async function uploadVideoChunk(uploadUrl: string, bytes: Uint8Array): Promise<void> {
+  const res = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "video/mp4",
+      "Content-Length": String(bytes.length),
+      "Content-Range": `bytes 0-${bytes.length - 1}/${bytes.length}`,
+    },
+    body: bytes,
+    signal: AbortSignal.timeout(120_000),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`tiktok video chunk upload ${res.status}: ${detail.slice(0, 300)}`);
+  }
 }
 
 async function pollPublishStatus(
@@ -324,9 +348,25 @@ Deno.serve(async (req: Request) => {
     }
 
     const title = buildTitle(idea, asset);
-    const init = await publishInit(accessToken, videoUrl, title);
+
+    // 1. Download the MP4 from Supabase storage into memory. ~15-30MB
+    //    typical, fits comfortably in Deno Deploy's 512MB cap.
+    const mp4Res = await fetch(videoUrl, { signal: AbortSignal.timeout(60_000) });
+    if (!mp4Res.ok) {
+      throw new Error(`fetch mp4 from ${videoUrl} -> ${mp4Res.status}`);
+    }
+    const mp4Bytes = new Uint8Array(await mp4Res.arrayBuffer());
+    console.log(`[${assetId}] mp4 fetched: ${(mp4Bytes.length / 1024 / 1024).toFixed(2)} MB`);
+
+    // 2. Tell TikTok we're about to upload — they return an upload_url.
+    const init = await publishInit(accessToken, mp4Bytes.length, title);
     publishId = init.publish_id;
+    const uploadUrl = init.upload_url;
     console.log(`[${assetId}] tiktok publish init -> ${publishId}`);
+
+    // 3. PUT the bytes (single chunk).
+    await uploadVideoChunk(uploadUrl, mp4Bytes);
+    console.log(`[${assetId}] tiktok video bytes uploaded`);
 
     // Stash the publish_id on the queue row so the background task can find
     // it AND the cockpit can see it even before terminal.
