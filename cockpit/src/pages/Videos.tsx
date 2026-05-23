@@ -128,11 +128,21 @@ export default function Videos() {
   // the inflight count by re-querying inside the interval rather than
   // restarting the interval on every state change.
   useEffect(() => {
-    hasInflightRef.current = assets.some(a => {
+    // Auto-refresh fires while ANY of these is in-flight:
+    //   - asset render: media.status is 'processing' or 'rendering'
+    //   - publish:      posts_queue.status is 'publishing' or 'pending'
+    // Without the publish check, the cockpit never noticed when a
+    // TikTok background poll flipped 'publishing' -> 'posted' or
+    // 'failed' because all assets were already done.
+    const assetsInFlight = assets.some(a => {
       const s = getStatus(a)
       return s === 'processing' || s === 'rendering'
     })
-  }, [assets])
+    const publishesInFlight = queue.some(q =>
+      q.status === 'publishing' || q.status === 'pending'
+    )
+    hasInflightRef.current = assetsInFlight || publishesInFlight
+  }, [assets, queue])
 
   useEffect(() => {
     const interval = setInterval(() => {
