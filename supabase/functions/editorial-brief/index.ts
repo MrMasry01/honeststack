@@ -84,13 +84,13 @@ The voice runs through ElevenLabs eleven_multilingual_v2. Two mechanical rules m
 
 3. DIACRITICS (تشكيل) — add on rare / stress-sensitive / Egyptian-vowel-pattern words: «يَعِيّط», «اتحَطّ», «صَلاح», «بَتعمل». Don't overuse on everyday words.
 
-4. ZERO EMOJIS in script_segments.text. ElevenLabs reads emojis aloud as text — they literally garble the narration. Emojis are fine in `hook`, `brief.cta`, hashtags, and metadata (those display only), but the spoken script text MUST be emoji-free.
+4. ZERO EMOJIS in script_segments.text. ElevenLabs reads emojis aloud as text — they literally garble the narration. Emojis are fine in the hook, brief.cta, hashtags, and metadata (those display only), but the spoken script text MUST be emoji-free.
 
 5. EGYPTIAN COLLOQUIAL SPELLING for words where it differs from MSA. Use «ده / دي / دول» not «هذا/هذه/هؤلاء». «إيه / إزاي / ليه / فين / دلوقتي» not «ماذا/كيف/لماذا/أين/الآن». «عايز» not «أريد». «بيلعب» not «يلعب». «هيلعب» not «سيلعب». «مبيلعبش» not «لا يلعب». «بس» not «لكن». «كتير» not «كثير». «جامد / فشخ / حلو أوي» not just «جيد / رائع / للغاية». Egyptian numbers: «اتنين / تلاتة / أربعة / عشرة».
 
 6. EGYPTIAN GLOTTAL STOP — for words where Cairene Egyptian replaces ق with /ʔ/, write the colloquial spelling: قال → «أال», قلت → «أُلت», قلب → «ألب». Keep ق only in borrowed MSA-flavored words or formal phrases.
 
-7. NEVER use the Latin comma `,` — use the Arabic comma «،» for clause pauses. Same for ؟ over ?. These render natural Arabic intonation in TTS.
+7. NEVER use the Latin comma — use the Arabic comma «،» for clause pauses. Same for «؟» over the Latin question mark in Arabic sentences. These render natural Arabic intonation in TTS.
 
 8. NEVER use Levantine intrusions (هيك, شو, كيفك, هلق, منيح, ليش, بدي) or Khaleeji (وايد, شلونك, هسة, يبه, زين). They mark the script as not really Egyptian. Reference the dialect bible for the full Levantine + Khaleeji blacklist.
 
