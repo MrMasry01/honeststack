@@ -4,8 +4,14 @@ import {
   useCurrentFrame,
   useVideoConfig,
   Img,
+  OffthreadVideo,
 } from "remotion";
 import type { KenBurns, Brand } from "../schema";
+
+/** Heuristic — treat URLs that end in a known video extension as video. */
+function isVideoUrl(url: string): boolean {
+  return /\.(mp4|mov|webm|m4v)(\?|#|$)/i.test(url);
+}
 
 interface ParallaxBackdropProps {
   visualUrl: string;
@@ -86,7 +92,12 @@ export const ParallaxBackdrop: React.FC<ParallaxBackdropProps> = ({
         }}
       />
 
-      {/* ── Layer 1: billboard image with Ken Burns ── */}
+      {/* ── Layer 1: billboard backdrop with Ken Burns ──
+          Image OR video. Video URLs (.mp4/.mov/.webm) use Remotion's
+          OffthreadVideo (frames extracted off-thread per render frame —
+          much lower memory than the regular Video component). Ken Burns
+          scale is disabled for video because the video already carries
+          motion; the subtle horizontal parallax pan stays. */}
       {visualUrl && (
         <div
           style={{
@@ -95,7 +106,9 @@ export const ParallaxBackdrop: React.FC<ParallaxBackdropProps> = ({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            transform: `translateX(${imgOffsetX}px) scale(${scale})`,
+            transform: isVideoUrl(visualUrl)
+              ? `translateX(${imgOffsetX}px)`
+              : `translateX(${imgOffsetX}px) scale(${scale})`,
             transformOrigin: "center center",
             // Allow slight overflow during zoom/pan without revealing edges
             margin: "-10%",
@@ -103,22 +116,42 @@ export const ParallaxBackdrop: React.FC<ParallaxBackdropProps> = ({
             height: "120%",
           }}
         >
-          <Img
-            src={visualUrl}
-            style={{
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              // When a character avatar fills the lower portion, anchor the
-              // image's focal content toward the top so the "event" reads in
-              // the upper portion of the frame.
-              objectPosition: upperBias ? "center 22%" : "center",
-            }}
-            // Remotion's Img pauses rendering until the image is loaded
-            onError={() => {
-              // Falls back gracefully to the brand-gradient layer below
-            }}
-          />
+          {isVideoUrl(visualUrl) ? (
+            <OffthreadVideo
+              src={visualUrl}
+              // We have our own ElevenLabs narration — never play the
+              // source video's audio.
+              muted
+              volume={0}
+              // Some Twitter/X video URLs return HTTP 403 on certain
+              // referers. Trying the request with no cross-origin attribute
+              // is more permissive; fallback handled by the brand-gradient
+              // layer 0 below.
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                objectPosition: upperBias ? "center 22%" : "center",
+              }}
+            />
+          ) : (
+            <Img
+              src={visualUrl}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                // When a character avatar fills the lower portion, anchor the
+                // image's focal content toward the top so the "event" reads in
+                // the upper portion of the frame.
+                objectPosition: upperBias ? "center 22%" : "center",
+              }}
+              // Remotion's Img pauses rendering until the image is loaded.
+              onError={() => {
+                // Falls back gracefully to the brand-gradient layer below
+              }}
+            />
+          )}
         </div>
       )}
 

@@ -54,7 +54,17 @@ type RawRow = {
   dedup_hash: string;
 };
 
-function extractImageUrls(item: Record<string, unknown>): string[] {
+/**
+ * Extract ALL media URLs from a tweet — images AND videos. Both kinds are
+ * stored in the same `media_urls` text[] column; downstream consumers
+ * detect type by URL extension (.mp4/.mov/.webm → video, otherwise image).
+ *
+ * For videos, picks the highest-bitrate MP4 variant from video_info.variants
+ * — that's the master/source quality, suitable for re-encode into our render.
+ * Animated GIFs are also captured (they come through Twitter's video pipeline
+ * as MP4s and look great as short looping backdrops).
+ */
+function extractMediaUrls(item: Record<string, unknown>): string[] {
   const urls = new Set<string>();
   const mediaArrays: unknown[] = [];
   const ext = item.extendedEntities as Record<string, unknown> | undefined;
@@ -63,14 +73,42 @@ function extractImageUrls(item: Record<string, unknown>): string[] {
   if (ent && Array.isArray(ent.media)) mediaArrays.push(...ent.media);
   // Some builds expose a flat `media` array.
   if (Array.isArray(item.media)) mediaArrays.push(...(item.media as unknown[]));
+
   for (const m of mediaArrays) {
     if (!m || typeof m !== "object") continue;
     const media = m as Record<string, unknown>;
     const type = String(media.type ?? "").toLowerCase();
-    // image URLs only — skip video / animated_gif
-    if (type && type !== "photo" && type !== "image") continue;
-    const u = media.media_url_https ?? media.media_url ?? media.url;
-    if (typeof u === "string" && u.startsWith("http")) urls.add(u);
+
+    if (type === "video" || type === "animated_gif") {
+      // Pull the highest-bitrate MP4 variant from video_info.variants.
+      const videoInfo = media.video_info as Record<string, unknown> | undefined;
+      const variants = videoInfo?.variants as
+        | Array<Record<string, unknown>>
+        | undefined;
+      if (Array.isArray(variants)) {
+        const mp4Variants = variants
+          .filter(
+            (v) =>
+              v.content_type === "video/mp4" && typeof v.url === "string",
+          )
+          .map((v) => ({
+            bitrate: Number(v.bitrate) || 0,
+            url: v.url as string,
+          }))
+          .sort((a, b) => b.bitrate - a.bitrate);
+        if (mp4Variants.length > 0) {
+          urls.add(mp4Variants[0].url);
+        }
+      }
+      continue;
+    }
+
+    // Images / photos (default behaviour). Empty type is treated as image
+    // because some upstream payloads omit it for plain photo attachments.
+    if (type === "" || type === "photo" || type === "image") {
+      const u = media.media_url_https ?? media.media_url ?? media.url;
+      if (typeof u === "string" && u.startsWith("http")) urls.add(u);
+    }
   }
   return [...urls];
 }
@@ -116,7 +154,7 @@ async function toRow(
     url,
     author: handle,
     content,
-    media_urls: extractImageUrls(item),
+    media_urls: extractMediaUrls(item),
     dedup_hash: await dedupHash(handle, content),
   };
 }
