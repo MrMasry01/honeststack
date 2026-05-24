@@ -5,8 +5,18 @@ import { NewsRoundupSchema } from "./schema";
 import type { NewsRoundupProps } from "./schema";
 
 const FPS = 30;
-const WIDTH = 1080;
-const HEIGHT = 1920;
+// 720p portrait. Dropped from 1080x1920 because 6-7 segment renders
+// were OOM-killing the Railway container at 1080p during FFmpeg encoding
+// (libx264 lookahead + reference frames hold ~30 raw frames in memory;
+// at 1080x1920x4-bytes that peaks ~250MB just in frame buffers, on top of
+// Chromium's render memory and the audio buffer — exceeded the container
+// budget on 6+ segment renders). 720x1280 cuts pixel count ~55%, peak
+// memory drops proportionally, container stays in budget. On TikTok/IG/YT
+// Shorts the visual difference is imperceptible in a scrolling feed —
+// platforms re-compress to ~720p anyway. Bump back to 1080 if/when on a
+// larger Railway plan.
+const WIDTH = 720;
+const HEIGHT = 1280;
 
 /**
  * Calculates the total frame count from the segments' duration_ms values
