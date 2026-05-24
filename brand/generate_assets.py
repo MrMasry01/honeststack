@@ -315,16 +315,100 @@ def compose_banner(
 
 
 # ─────────────────────────────────────────────────────────────────
-# Banners
+# YouTube banner — composed inside the 1546x423 all-devices safe area.
+# ─────────────────────────────────────────────────────────────────
+# YouTube renders the banner at multiple crops:
+#   - Full 2560x1440 only on TVs
+#   - Desktop wide:  2560x423 centered
+#   - Tablet:        1855x423 centered
+#   - Phone/all:     1546x423 centered  ← critical "all-devices" zone
+# Everything important must live inside the 1546x423 box, otherwise
+# mobile viewers don't see it.
+
+def compose_youtube_banner(out_path: Path, title: str, tagline: str) -> None:
+    BW, BH = 2560, 1440
+    SAFE_W, SAFE_H = 1546, 423
+    SAFE_X = (BW - SAFE_W) // 2
+    SAFE_Y = (BH - SAFE_H) // 2
+
+    canvas = gradient_background((BW, BH), NAVY, EGYPT_RED).convert("RGBA")
+
+    # ---- Pharaoh on right side of the SAFE area ----------------
+    target_h = int(SAFE_H * 0.92)
+    ratio = target_h / src.size[1]
+    target_w = int(src.size[0] * ratio)
+    pharaoh = src.resize((target_w, target_h), Image.LANCZOS)
+
+    ph_x = SAFE_X + SAFE_W - target_w - int(SAFE_H * 0.05)
+    ph_y = SAFE_Y + (SAFE_H - target_h) // 2
+    add_pharaoh_with_glow(canvas, pharaoh, (ph_x, ph_y))
+
+    # ---- Text on the left side of the SAFE area ----------------
+    draw = ImageDraw.Draw(canvas)
+    text_left = SAFE_X + int(SAFE_H * 0.08)
+    text_right = ph_x - int(SAFE_H * 0.10)
+    text_width = max(100, text_right - text_left)
+
+    title_font = fit_font(draw, title, text_width, int(SAFE_H * 0.42), int(SAFE_H * 0.36))
+    tagline_font = fit_font(draw, tagline, text_width, int(SAFE_H * 0.18), int(SAFE_H * 0.14))
+
+    title_bbox = draw.textbbox((0, 0), title, font=title_font)
+    title_w = title_bbox[2] - title_bbox[0]
+    title_h = title_bbox[3] - title_bbox[1]
+    tagline_bbox = draw.textbbox((0, 0), tagline, font=tagline_font)
+    tagline_h = tagline_bbox[3] - tagline_bbox[1]
+
+    # Vertically center the title + underline + tagline as a block.
+    underline_gap = int(SAFE_H * 0.04)
+    underline_thickness = max(3, SAFE_H // 100)
+    tagline_gap = int(SAFE_H * 0.06)
+    block_h = title_h + underline_gap + underline_thickness + tagline_gap + tagline_h
+    text_y = SAFE_Y + (SAFE_H - block_h) // 2 - int(SAFE_H * 0.04)
+
+    shadow = max(3, BH // 360)
+    draw.text((text_left + shadow, text_y + shadow), title, font=title_font, fill=(0, 0, 0, 140))
+    draw.text((text_left, text_y), title, font=title_font, fill=WHITE)
+
+    underline_y = text_y + title_h + underline_gap
+    underline_w = min(int(title_w * 0.55), int(text_width * 0.55))
+    draw.rectangle(
+        [text_left, underline_y, text_left + underline_w, underline_y + underline_thickness],
+        fill=GOLD,
+    )
+    draw.text(
+        (text_left, underline_y + underline_thickness + tagline_gap),
+        tagline,
+        font=tagline_font,
+        fill=GOLD,
+    )
+
+    # ---- Subtle safe-area boundary cue (optional, very faint) --
+    # Helps the eye understand the visible region across crops, but
+    # the human-eye boundary is the brighter centered red area.
+    # (skipped — the gradient itself already implies a focal point)
+
+    canvas.convert("RGB").save(out_path, "PNG", optimize=True)
+
+
+# ─────────────────────────────────────────────────────────────────
+# Other banners — these don't have multi-crop concerns, so the
+# existing compose_banner positioning works fine.
 # ─────────────────────────────────────────────────────────────────
 print("\n--- Banners (composed: gradient + Pharaoh + title + tagline) ---")
-BANNERS = [
-    ("youtube-banner-2560x1440.png", (2560, 1440), "HonestStack", "Daily Egyptian football in 60 seconds"),
+
+compose_youtube_banner(
+    OUT / "youtube-banner-2560x1440.png",
+    "HonestStack",
+    "Daily Egyptian football in 60 seconds",
+)
+print(f"  {'youtube-banner-2560x1440.png':32s} (2560x1440, safe-area-aware)")
+
+OTHER_BANNERS = [
     ("x-header-1500x500.png",         (1500, 500),  "HonestStack", "Daily Egyptian football in 60 seconds"),
     ("fb-cover-820x312.png",          (820, 312),   "HonestStack", "Daily football, in Egyptian"),
     ("linkedin-cover-1584x396.png",   (1584, 396),  "HonestStack", "Automated short-form football news"),
 ]
-for name, size, title, tagline in BANNERS:
+for name, size, title, tagline in OTHER_BANNERS:
     compose_banner(OUT / name, size, title, tagline)
     print(f"  {name:32s} ({size[0]}x{size[1]})")
 
