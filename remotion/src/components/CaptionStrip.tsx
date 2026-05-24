@@ -1,5 +1,5 @@
 import React from "react";
-import { interpolate, useCurrentFrame } from "remotion";
+import { interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 // @remotion/google-fonts — loads the Arabic font at render time
 import { loadFont } from "@remotion/google-fonts/Cairo";
 
@@ -33,6 +33,22 @@ export const CaptionStrip: React.FC<CaptionStripProps> = ({
   entranceProgress,
 }) => {
   const frame = useCurrentFrame();
+  const { height } = useVideoConfig();
+
+  // ── Proportional sizing — works at any canvas height ────────────────────
+  // Previous version used absolute pixel values (52px font, 100px minHeight,
+  // 48px padding) sized for a 1080x1920 canvas. After dropping render
+  // resolution to 720x1280 those constants became proportionally HUGE —
+  // captions wrapped to 5-6 lines covering most of the frame and the
+  // Pharaoh mascot. All sizes are now driven from the canvas height.
+  const fontSize = Math.round(height * 0.028);    // 720 -> 36, 1080 -> 54
+  const padX = Math.round(height * 0.022);         // 720 -> 28, 1080 -> 42
+  const padTop = Math.round(height * 0.012);       // 720 -> 15, 1080 -> 22
+  const padBottom = Math.round(height * 0.020);    // 720 -> 26, 1080 -> 38
+  const minStripH = Math.round(height * 0.055);    // 720 -> 70, 1080 -> 105
+  const bottomGap = Math.round(height * 0.012);    // small lift off the very edge
+  const accentBarH = Math.round(height * 0.006);   // 720 -> 4, 1080 -> 6
+  const glowLineH = Math.max(2, Math.round(height * 0.002));
 
   const slideY = interpolate(entranceProgress, [0, 1], [80, 0], {
     extrapolateLeft: "clamp",
@@ -51,7 +67,7 @@ export const CaptionStrip: React.FC<CaptionStripProps> = ({
     <div
       style={{
         position: "absolute",
-        bottom: 0,
+        bottom: bottomGap,
         left: 0,
         right: 0,
         transform: `translateY(${slideY}px)`,
@@ -63,7 +79,7 @@ export const CaptionStrip: React.FC<CaptionStripProps> = ({
       {/* Glow line above the strip */}
       <div
         style={{
-          height: 3,
+          height: glowLineH,
           background: brand.accent,
           opacity: glowOpacity + 0.6,
           boxShadow: `0 0 12px 4px ${brand.accent}`,
@@ -75,11 +91,11 @@ export const CaptionStrip: React.FC<CaptionStripProps> = ({
         style={{
           background: `linear-gradient(90deg, ${brand.primary}F0, ${brand.primary}E8)`,
           borderTop: `3px solid ${brand.accent}`,
-          paddingTop: 20,
-          paddingBottom: 48,
-          paddingLeft: 32,
-          paddingRight: 32,
-          minHeight: 100,
+          paddingTop: padTop,
+          paddingBottom: padBottom,
+          paddingLeft: padX,
+          paddingRight: padX,
+          minHeight: minStripH,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -91,8 +107,8 @@ export const CaptionStrip: React.FC<CaptionStripProps> = ({
           style={{
             fontFamily: "'Cairo', 'IBM Plex Sans Arabic', Arial, sans-serif",
             fontWeight: 800,
-            fontSize: 52,
-            lineHeight: 1.45,
+            fontSize,
+            lineHeight: 1.35,
             color: "#FFFFFF",
             textAlign: "center",
             margin: 0,
@@ -113,7 +129,7 @@ export const CaptionStrip: React.FC<CaptionStripProps> = ({
       {/* Brand accent bottom bar */}
       <div
         style={{
-          height: 8,
+          height: accentBarH,
           background: `linear-gradient(90deg, ${brand.accent}, ${brand.primary}, ${brand.accent})`,
         }}
       />

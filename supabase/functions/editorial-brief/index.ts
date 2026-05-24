@@ -82,7 +82,12 @@ The voice runs through ElevenLabs eleven_multilingual_v2. Two mechanical rules m
    Patterns: build with … then land with . then punch with !  ·  setup with : then land with .  ·  pivot with — mid-segment  ·  ? for any rhetorical hook to the viewer.
    NEVER use «<», «>», SSML tags, or any markup — punctuation IS the markup.
 
-3. DIACRITICS (تشكيل) — add on rare / stress-sensitive / Egyptian-vowel-pattern words: «يَعِيّط», «اتحَطّ», «صَلاح», «بَتعمل». Don't overuse on everyday words.
+3. DIACRITICS (تشكيل) — AGGRESSIVE USE. The voice defaults to MSA pronunciation on bare letters. To force natural Egyptian delivery, add تشكيل on:
+  - EVERY Egyptian-conjugated verb (so the vowels match Cairene speech, not MSA): «بَيلعب», «بَتلعب», «بَنلعب», «بَيكسبوا», «هَيلعب», «اتفَشَخ», «اتحَطّ», «بَيهدّى», «مَلَعبتش».
+  - EVERY word where the unmarked spelling would be read in MSA but should sound Egyptian: «صَلاح» (not Saluh), «بَطل», «الجَون», «حَلو», «جَامد».
+  - Stress-sensitive words like «يَعِيّط», «شُفته», «وَرّاه», «كَسَّر».
+  - Any place where mis-stress would change meaning (Egyptian past vs present, e.g. «كَسَب» past vs «بَيكسب» present-continuous).
+  Err on MORE tashkeel rather than less — the small visual cost in the script is worth the major delivery quality gain. Skip تشكيل only on truly common particles (و، في، على، من، إلى) and on Latin-script names.
 
 4. ZERO EMOJIS in script_segments.text. ElevenLabs reads emojis aloud as text — they literally garble the narration. Emojis are fine in the hook, brief.cta, hashtags, and metadata (those display only), but the spoken script text MUST be emoji-free.
 

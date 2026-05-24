@@ -184,13 +184,17 @@ export const Host: React.FC<HostProps> = ({
   }, [audioData, absoluteFrame, fps]);
 
   // ── Mascot sizing — SMALL, lower band only ────────────────────────────────
-  // The Pharaoh occupies ~24% of the 1920px frame height and sits in a band
+  // The Pharaoh occupies ~22% of the frame height and sits in a band
   // ABOVE the caption strip, so the central backdrop stays fully visible.
-  const CAPTION_RESERVED = 180; // safe gap above the RTL caption strip
-  const CHAR_HEIGHT = Math.round(height * 0.24); // ≈ 460 px (lower ~24%)
+  // CAPTION_RESERVED is proportional to canvas height — needs to be larger
+  // than the actual caption strip total height (~16% at our proportions:
+  // glow line + padTop + 2-3 lines of font 0.028h + padBottom + bottomGap
+  // + accent bar). 16.5% gives a comfortable clearance.
+  const CAPTION_RESERVED = Math.round(height * 0.165);
+  const CHAR_HEIGHT = Math.round(height * 0.22);
   // The source art is a 9:16-ish portrait; give the box a portrait aspect so
   // the full-body Pharaoh is not distorted (objectFit: contain anyway).
-  const CHAR_WIDTH = Math.round(CHAR_HEIGHT * 0.62); // ≈ 285 px
+  const CHAR_WIDTH = Math.round(CHAR_HEIGHT * 0.62);
 
   // ── Horizontal glide — slow left↔right walk across the lower band ─────────
   // One full left→right→left oscillation every ~14 s. Driven by the ABSOLUTE
