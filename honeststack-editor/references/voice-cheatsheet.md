@@ -106,6 +106,18 @@ sound like a real person reacting.
 
 > **Never** use `<` `>` brackets or SSML tags. ElevenLabs reads them as
 > literal text. There are no markup tags — punctuation IS the markup.
+>
+> **NO EMOJIS in `script_segments.text`.** ElevenLabs reads emojis aloud as
+> text and garbles the narration. The `text` field is BOTH the spoken script
+> AND the on-screen caption — emojis there break the voice. Put emojis in
+> `hook`, `brief.cta`, hashtags, and outro metadata (those display only).
+>
+> **Use the Arabic comma «،» (U+060C), NOT the Latin `,`** — renders proper
+> Arabic intonation pauses. Same for Arabic `؟` over Latin `?` for questions.
+>
+> **For words where Cairene Egyptian replaces ق with /ʔ/**, write the
+> colloquial spelling: قال → «أال», قلت → «أُلت», قلب → «ألب». Keep ق only
+> for borrowed MSA-flavored words.
 
 ### Punctuation patterns by intent
 

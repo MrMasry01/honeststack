@@ -293,6 +293,14 @@ on-screen RTL caption + TTS narration.
 
 ## Reference files
 
+- `references/egyptian-dialect.md` — the **deepest** voice reference. Source-backed
+  research on contemporary Egyptian-Arabic for football short-form video, with
+  verified Bassem Youssef / Amr Adib catchphrases, modern creator patterns, the full
+  football vocabulary (colloquial vs MSA), 2024-2026 trending slang, comedy
+  conventions, the ElevenLabs-Egyptian TTS rule book (glottal stops, ج→/g/, diacritics,
+  **emojis-strip-from-TTS rule**), the Levantine + Khaleeji intrusion blacklist, and
+  the World Cup 2026 time-zone humor angle. **The dialect bible — read once end-to-end,
+  then dip back by section.**
 - `references/tone-guide.md` — the Egyptian-Arabic voice: three-icon persona (Bassem
   Youssef + Amr Adib + modern sports influencers), hook patterns, flow, sample scripts,
   self-check. **Read this before writing or polishing any script.**

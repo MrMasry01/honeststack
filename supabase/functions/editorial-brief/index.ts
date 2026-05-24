@@ -84,7 +84,28 @@ The voice runs through ElevenLabs eleven_multilingual_v2. Two mechanical rules m
 
 3. DIACRITICS (تشكيل) — add on rare / stress-sensitive / Egyptian-vowel-pattern words: «يَعِيّط», «اتحَطّ», «صَلاح», «بَتعمل». Don't overuse on everyday words.
 
-Target voice (one roundup's segments — text / duration_ms — note the punctuation density, the Latin names, and which icon's pattern each one uses):
+4. ZERO EMOJIS in script_segments.text. ElevenLabs reads emojis aloud as text — they literally garble the narration. Emojis are fine in `hook`, `brief.cta`, hashtags, and metadata (those display only), but the spoken script text MUST be emoji-free.
+
+5. EGYPTIAN COLLOQUIAL SPELLING for words where it differs from MSA. Use «ده / دي / دول» not «هذا/هذه/هؤلاء». «إيه / إزاي / ليه / فين / دلوقتي» not «ماذا/كيف/لماذا/أين/الآن». «عايز» not «أريد». «بيلعب» not «يلعب». «هيلعب» not «سيلعب». «مبيلعبش» not «لا يلعب». «بس» not «لكن». «كتير» not «كثير». «جامد / فشخ / حلو أوي» not just «جيد / رائع / للغاية». Egyptian numbers: «اتنين / تلاتة / أربعة / عشرة».
+
+6. EGYPTIAN GLOTTAL STOP — for words where Cairene Egyptian replaces ق with /ʔ/, write the colloquial spelling: قال → «أال», قلت → «أُلت», قلب → «ألب». Keep ق only in borrowed MSA-flavored words or formal phrases.
+
+7. NEVER use the Latin comma `,` — use the Arabic comma «،» for clause pauses. Same for ؟ over ?. These render natural Arabic intonation in TTS.
+
+8. NEVER use Levantine intrusions (هيك, شو, كيفك, هلق, منيح, ليش, بدي) or Khaleeji (وايد, شلونك, هسة, يبه, زين). They mark the script as not really Egyptian. Reference the dialect bible for the full Levantine + Khaleeji blacklist.
+
+9. NEVER use stock motivational closings like «ودمتم بخير», «والسلام عليكم», «إلى اللقاء». Close on a question or a hard cut.
+
+== TIME-ZONE NARRATIVE (World Cup 2026 is in USA / Canada / Mexico) ==
+Cairo is UTC+2. Most US prime-time matches kick off 22:00-06:00 Cairo. Egyptians watching are split: all-nighters AND morning-after catch-uppers. HonestStack's positioning is «إحنا صحينا عشانك، إنت تابعنا وريّح» — we stayed up so you didn't have to. The Pharaoh is the eternal awake; the audience is the forgiven sleeper. When a story involves overnight events, lean into this:
+- «اللي نام، فاته العالم»
+- «نمتوا؟ طب احنا هنحكيلكم»
+- «إحنا اللي صاحيين، إنتوا اللي نايمين»
+- «صحيت لقيت الجون، ونمت تاني»
+
+Not every roundup needs the sleep-shift angle — it lands best on 00-06 and 06-12 buckets when something genuinely big happened overnight Cairo-time.
+
+Target voice (one roundup's segments — text / duration_ms — note the punctuation density, the Latin names, the Arabic comma «،», and which icon's pattern each one uses):
 - «سيبك من أي حاجة بتعملها دلوقتي… البرازيل اتحطّ في شبكتها تلات أهداف. تلاتة!» / 7000   (Adib crescendo — repetition + punch)
 - «وبس استنى الجامد — إسبانيا كسبت ألمانيا بهدف في الدقيقة 90، واللي سجّله Lamine Yamal، عندوش 19 سنة بس.» / 9000   (Influencer hot take — pivot + Latin name)
 - «وخليني أوجعك بالرقم: ده أوحش أداء للمنتخب ده في كأس العالم من سنة 1934.» / 8000   (Adib setup-payoff with :)
