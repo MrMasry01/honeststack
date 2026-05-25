@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>About — HonestStack</title>
+  <meta name="description" content="HonestStack is an automated short-form video studio for World Cup 2026 football news, in colloquial Egyptian Arabic. The story, the Pharaoh, and how the videos get made.">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="any" href="/favicon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <meta name="theme-color" content="#0E1B2C">
+  <meta property="og:title" content="About HonestStack">
+  <meta property="og:description" content="The story behind the Pharaoh and the short-form football engine.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://honeststack.co.uk/about.html">
+  <meta property="og:image" content="https://honeststack.co.uk/favicon.png">
+  <link rel="stylesheet" href="/assets/site.css">
+  <style>
+    .two-col {
+      display: grid; grid-template-columns: 1.4fr 1fr; gap: 48px;
+      align-items: start; margin-top: 24px;
+    }
+    .two-col .text p { max-width: none; }
+    .pharaoh-card {
+      background: #ffffff;
+      border-radius: 24px;
+      padding: 24px 20px 10px;
+      box-shadow:
+        0 0 60px rgba(244, 194, 13, 0.18),
+        0 20px 40px rgba(0, 0, 0, 0.5);
+    }
+    .pharaoh-card img { width: 100%; height: auto; }
+    .stack {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 14px; margin-top: 20px;
+    }
+    .stack-item {
+      background: #162438; border: 1px solid #243a55;
+      padding: 16px 18px; border-radius: 12px;
+    }
+    .stack-item h4 {
+      color: #F4C20D; font-size: 11px; font-weight: 800;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .stack-item p { font-size: 14px; color: #cbd5e1; margin: 0; line-height: 1.5; }
+    @media (max-width: 760px) {
+      .two-col { grid-template-columns: 1fr; gap: 32px; }
+      .pharaoh-card { max-width: 280px; margin: 0 auto; }
+    }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-wrap">
+      <a href="/" class="brand">
+        <img src="/favicon.png" alt="">
+        <span>HonestStack</span>
+      </a>
+      <nav>
+        <a href="/episodes.html">Episodes</a>
+        <a href="/about.html" class="active">About</a>
+        <a href="/faq.html">FAQ</a>
+        <a href="/contact.html" class="always-show">Contact</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="page-head">
+    <div class="page-head-wrap">
+      <div class="kicker">ABOUT</div>
+      <h1>A football short-form <span class="accent">studio</span> with a Pharaoh as the host.</h1>
+      <p class="lede">
+        HonestStack publishes four short-form football news roundups per day in colloquial Egyptian Arabic. Same Pharaoh narrator every episode. Real photos and clips from tier-1 football journalists. A voice that sounds like the friend who just saw a wild match and grabbed you to talk about it.
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="two-col">
+      <div class="text">
+        <h2>The <span class="accent">story</span></h2>
+        <p>
+          Most football news for Egyptian fans is written in formal Modern Standard Arabic, read by news anchors, and built for newspapers. None of that matches how Egyptians actually talk about football — at the ahwa, on WhatsApp, in the group chat after the goal.
+        </p>
+        <p>
+          HonestStack closes that gap. It pulls the real stories — transfers, results, manager moves, controversies — and rewrites them in the voice a young Egyptian football creator would use. The Pharaoh mascot delivers them. Four times a day. Every day of the tournament cycle.
+        </p>
+
+        <h2 style="margin-top: 40px;">The <span class="accent">Pharaoh</span></h2>
+        <p>
+          One host, every episode. The Pharaoh is intentionally consistent — same headdress, same red Egypt jersey, same animated mouth movement synced to the narration. He never reads the news; he reacts to it. He stays up while you sleep (the World Cup is in North America — most matches are overnight in Cairo). When you wake up, his roundup is waiting.
+        </p>
+
+        <h2 style="margin-top: 40px;">How a video <span class="accent">gets made</span></h2>
+        <p>
+          Each video moves through four stages: source ingestion (every six hours), editorial scripting (clustering, ranking, writing in Egyptian voice), rendering (text-to-speech narration + verified visuals + Pharaoh animation), and publishing (TikTok, Instagram, YouTube). The full cycle takes about 12 minutes from raw source to finished MP4.
+        </p>
+
+        <h3>The stack</h3>
+        <div class="stack">
+          <div class="stack-item">
+            <h4>SOURCES</h4>
+            <p>Tier-1 football journalists on Twitter/X + major football RSS feeds (BBC, Guardian, ESPN).</p>
+          </div>
+          <div class="stack-item">
+            <h4>EDITORIAL</h4>
+            <p>Anthropic's Claude with a HonestStack-trained editorial skill (colloquial Egyptian, sports tone, story scoring).</p>
+          </div>
+          <div class="stack-item">
+            <h4>NARRATION</h4>
+            <p>ElevenLabs multilingual TTS, cloned voice tuned to Cairene Arabic pronunciation.</p>
+          </div>
+          <div class="stack-item">
+            <h4>RENDERING</h4>
+            <p>Remotion (React-based video framework) with a custom 9:16 short-form composition.</p>
+          </div>
+          <div class="stack-item">
+            <h4>HOSTING</h4>
+            <p>Supabase for data + storage. Railway for the render service. GitHub Pages for this site.</p>
+          </div>
+          <div class="stack-item">
+            <h4>PUBLISHING</h4>
+            <p>Direct API integration with TikTok Content Posting API, YouTube Data API, and Instagram Graph API.</p>
+          </div>
+        </div>
+
+        <h2 style="margin-top: 40px;">Who's <span class="accent">behind it</span></h2>
+        <p>
+          HonestStack is founded and operated by Sherif (Egypt). It's a one-person studio leaning on automation to publish at network-scale cadence. Contact <a href="mailto:hello@honeststack.co.uk">hello@honeststack.co.uk</a> for partnerships, press, or anything else.
+        </p>
+      </div>
+      <aside>
+        <div class="pharaoh-card">
+          <img src="/assets/pharaoh.png" alt="The Pharaoh mascot — HonestStack's animated host">
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <div class="foot-wrap">
+      <div class="foot-brand">
+        <img src="/favicon.png" alt="">
+        <div>
+          <div class="wordmark-lg">HonestStack</div>
+          <div class="tag">World Cup 2026 short-form video studio — Egyptian Arabic.</div>
+        </div>
+      </div>
+      <div class="foot-col">
+        <div class="h">Site</div>
+        <a href="/">Home</a>
+        <a href="/episodes.html">Episodes</a>
+        <a href="/about.html">About</a>
+        <a href="/faq.html">FAQ</a>
+      </div>
+      <div class="foot-col">
+        <div class="h">Contact</div>
+        <a href="/contact.html">Contact us</a>
+        <a href="mailto:hello@honeststack.co.uk">hello@honeststack.co.uk</a>
+      </div>
+      <div class="foot-col">
+        <div class="h">Legal</div>
+        <a href="/legal/honeststack-terms.html">Terms of Service</a>
+        <a href="/legal/honeststack-privacy.html">Privacy Policy</a>
+      </div>
+    </div>
+    <div class="copy">
+      <div>&copy; 2026 HonestStack. All rights reserved.</div>
+      <div>honeststack.co.uk</div>
+    </div>
+  </footer>
+</body>
+</html>
