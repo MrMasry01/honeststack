@@ -22,6 +22,16 @@ export const SegmentSchema = z.object({
   visual_url: z
     .string()
     .describe("Image URL for this segment's backdrop"),
+  audio_url: z
+    .string()
+    .optional()
+    .describe(
+      "URL to this segment's individual TTS MP3. When provided, this audio " +
+      "plays only during this segment's frames — the segment's duration_ms " +
+      "is set to the actual MP3 length by the upstream pipeline, so visual " +
+      "and audio stay perfectly synced. When omitted, host_voice_url is " +
+      "expected to be the full-video narration (legacy mode)."
+    ),
   duration_ms: z
     .number()
     .min(1000)

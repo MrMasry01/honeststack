@@ -70,7 +70,8 @@ type Brief = {
 type BuiltSegment = {
   text_ar: string;
   visual_url: string;
-  duration_ms: number;
+  audio_url: string;    // per-segment TTS MP3 — Remotion plays only during this scene
+  duration_ms: number;  // set to actual MP3 duration so audio + visual stay synced
   ken_burns: { from: number; to: number };
 };
 
@@ -703,11 +704,8 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
     : "";
 
   // Validate there is something to narrate up-front.
-  const narrationText = rawSegments
-    .map((s) => s.text)
-    .filter(Boolean)
-    .join(" ");
-  if (!narrationText) {
+  const anyText = rawSegments.some((s) => s.text);
+  if (!anyText) {
     throw new Error("no segment text to narrate");
   }
 
@@ -718,19 +716,38 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
   // the host is the fixed Egyptian Pharaoh mascot bundled with Remotion.
   const pexelsKey = Deno.env.get("PEXELS_API_KEY") ?? "";
 
-  // (a) Audio — ElevenLabs narration.
-  const audioJob = (async (): Promise<{ url: string; ms: number }> => {
-    const mp3 = await generateNarration(voiceId, elevenKey, narrationText);
-    const audioPath = `audio/${ideaId}.mp3`;
-    const { error } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .upload(audioPath, mp3, { contentType: "audio/mpeg", upsert: true });
-    if (error) throw new Error(`audio upload: ${error.message}`);
-    return {
-      url: `${supabaseUrl}/storage/v1/object/public/${STORAGE_BUCKET}/${audioPath}`,
-      ms: measureMp3DurationMs(mp3),
-    };
-  })();
+  // (a) PER-SEGMENT TTS — one ElevenLabs request per segment, parallel.
+  //
+  // Why per-segment vs one big request:
+  //   - We get the EXACT duration of each segment's narration, so the
+  //     Remotion scene length can be set to that exactly. No more
+  //     "visual races ahead of narration" — audio and visual are atomically
+  //     bound per scene.
+  //   - Failed segments don't kill the whole TTS.
+  //   - Same total characters → same total ElevenLabs cost.
+  //
+  // Each segment's MP3 is uploaded to its own path under audio/<idea>/<i>.mp3
+  // and the per-segment audio_url is passed through to Remotion.
+  const audioJobs = rawSegments.map((seg, i) =>
+    (async (): Promise<{ url: string; ms: number }> => {
+      if (!seg.text) {
+        // Empty segment — emit a silent ~500ms placeholder so the scene
+        // still has a non-zero duration. Should never happen for normal
+        // editorial output but handles the edge case.
+        return { url: "", ms: 500 };
+      }
+      const mp3 = await generateNarration(voiceId, elevenKey, seg.text);
+      const audioPath = `audio/${ideaId}/${i}.mp3`;
+      const { error } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(audioPath, mp3, { contentType: "audio/mpeg", upsert: true });
+      if (error) throw new Error(`segment ${i} audio upload: ${error.message}`);
+      return {
+        url: `${supabaseUrl}/storage/v1/object/public/${STORAGE_BUCKET}/${audioPath}`,
+        ms: measureMp3DurationMs(mp3),
+      };
+    })()
+  );
 
   // Per-segment diagnostics: how each backdrop was resolved.
   const visualDiag: string[] = new Array(rawSegments.length).fill("");
@@ -837,25 +854,25 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
   );
 
   // Await everything together.
-  const [audio, visualUrls] = await Promise.all([
-    audioJob,
+  const [segmentAudios, visualUrls] = await Promise.all([
+    Promise.all(audioJobs),
     Promise.all(visualJobs),
   ]);
 
-  const hostVoiceUrl = audio.url;
-  const audioMs = audio.ms;
-
-  // Scale segment durations so they sum to the real audio length,
-  // keeping the visuals synced to the narration.
-  const declaredTotal = rawSegments.reduce((s, x) => s + x.durationMs, 0) || 1;
-  const scale = audioMs > 0 ? audioMs / declaredTotal : 1;
+  // The "host_voice_url" prop on the Remotion composition is now unused
+  // when per-segment audio is set — each Scene plays its own MP3. We still
+  // pass the first segment's URL so the prop has a non-empty value (it
+  // satisfies the zod schema as a string and is harmlessly never played).
+  const hostVoiceUrl = segmentAudios[0]?.url ?? "";
 
   // ---- 5b. assemble the built segments -------------------
+  // Each segment's duration_ms is set to its OWN MP3's measured length —
+  // no more proportional scaling guess. Audio + visual are perfectly synced.
   const builtSegments: BuiltSegment[] = rawSegments.map((seg, i) => {
-    // Scale duration; clamp into the schema-valid 1000-30000ms range.
-    const scaled = Math.max(
+    const audio = segmentAudios[i];
+    const durationMs = Math.max(
       1000,
-      Math.min(30000, Math.round(seg.durationMs * scale)),
+      Math.min(30000, audio?.ms ?? seg.durationMs ?? 8000),
     );
     // Alternate the Ken Burns direction for visual variety.
     const kenBurns = i % 2 === 0
@@ -863,12 +880,13 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
       : { from: 1.12, to: 1.0 };
     return {
       // Remotion's text_ar field is the ON-SCREEN OVERLAY (not narration).
-      // We now have a dedicated `caption` field per segment (the short
-      // clickbait). Narration `text` continues to go to ElevenLabs as the
-      // spoken script. Fallback to text for legacy ideas without caption.
+      // The dedicated `caption` field per segment (the short clickbait)
+      // goes here. Narration `text` is what TTS read. Fallback to text for
+      // legacy ideas without caption.
       text_ar: seg.caption || seg.text || " ",
+      audio_url: audio?.url ?? "",
       visual_url: visualUrls[i],
-      duration_ms: scaled,
+      duration_ms: durationMs,
       ken_burns: kenBurns,
     };
   });

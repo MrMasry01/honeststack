@@ -54,8 +54,22 @@ const Scene: React.FC<SceneProps> = ({
     durationInFrames: 20,
   });
 
+  // Per-segment audio (new architecture) takes precedence over the global
+  // voiceUrl (legacy mode). When segment.audio_url is set, this scene plays
+  // ONLY its own MP3 — visual duration_ms is set to the actual MP3 length
+  // upstream, so audio + visual stay perfectly in sync per scene.
+  const sceneAudioUrl = segment.audio_url || voiceUrl;
+  const hasPerSegmentAudio = Boolean(segment.audio_url);
+
   return (
     <AbsoluteFill>
+      {/* 0. Per-segment narration audio. When the upstream pipeline split
+             TTS per segment, each scene gets its own MP3 — Sequence cuts it
+             off at scene end automatically. */}
+      {hasPerSegmentAudio && (
+        <Audio src={sceneAudioUrl} volume={1} />
+      )}
+
       {/* 1. Parallax backdrop — the event visual. The fixed Pharaoh mascot is
              small and lives in a bottom band, so the event visual is always
              biased to the UPPER portion (it occupies the upper ~75% of the
@@ -70,11 +84,14 @@ const Scene: React.FC<SceneProps> = ({
 
       {/* 2. Host — the fixed Egyptian Pharaoh mascot. Small, glides
              horizontally along the lower band above the caption strip, with
-             an audio-driven mouth swap. */}
+             an audio-driven mouth swap. Audio offset is 0 when audio is
+             per-segment (Host samples from the start of its OWN MP3), or
+             the absolute segment start frame when in legacy global-audio
+             mode (Host samples from the matching slice of the full MP3). */}
       <Host
-        voiceUrl={voiceUrl}
+        voiceUrl={sceneAudioUrl}
         entranceProgress={entranceProgress}
-        audioFrameOffset={segmentStartFrame}
+        audioFrameOffset={hasPerSegmentAudio ? 0 : segmentStartFrame}
       />
 
       {/* 3. RTL Arabic caption strip (bottom — stays above the character) */}
@@ -136,10 +153,18 @@ export const NewsRoundup: React.FC<NewsRoundupProps> = ({
   }
   const outroStart = cursor;
 
+  // Per-segment audio is the new architecture (one MP3 per segment,
+  // perfect audio↔visual sync). Legacy mode uses one big host_voice_url
+  // played globally with the proportional duration-scaling hack. Detect
+  // which mode this composition is in from the first segment.
+  const usingPerSegmentAudio = segments.some((s) => Boolean(s.audio_url));
+
   return (
     <AbsoluteFill style={{ background: "#000" }}>
-      {/* ── Global voiceover (full duration) ── */}
-      {host_voice_url && (
+      {/* ── Global voiceover (legacy mode only) ──
+          When any segment provides its own audio_url, audio is played
+          per-segment inside each Scene — no global track. */}
+      {!usingPerSegmentAudio && host_voice_url && (
         <Audio src={host_voice_url} volume={1} />
       )}
 
