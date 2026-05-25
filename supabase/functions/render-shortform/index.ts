@@ -728,26 +728,52 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
   //
   // Each segment's MP3 is uploaded to its own path under audio/<idea>/<i>.mp3
   // and the per-segment audio_url is passed through to Remotion.
-  const audioJobs = rawSegments.map((seg, i) =>
-    (async (): Promise<{ url: string; ms: number }> => {
-      if (!seg.text) {
-        // Empty segment — emit a silent ~500ms placeholder so the scene
-        // still has a non-zero duration. Should never happen for normal
-        // editorial output but handles the edge case.
-        return { url: "", ms: 500 };
+  //
+  // CONCURRENCY: ElevenLabs Free / Creator tiers rate-limit at ~2-4
+  // concurrent TTS requests per voice. Firing 7 at once returns 429. We
+  // process at most TTS_CONCURRENCY in parallel — total wall time is
+  // basically the same since each generation is ~5-15s and we have
+  // visual jobs running on the side.
+  const TTS_CONCURRENCY = 2;
+  type AudioResult = { url: string; ms: number };
+
+  const runOneSegmentAudio = async (i: number): Promise<AudioResult> => {
+    const seg = rawSegments[i];
+    if (!seg.text) {
+      // Empty segment — emit a silent ~500ms placeholder so the scene
+      // still has a non-zero duration. Should never happen for normal
+      // editorial output but handles the edge case.
+      return { url: "", ms: 500 };
+    }
+    const mp3 = await generateNarration(voiceId, elevenKey, seg.text);
+    const audioPath = `audio/${ideaId}/${i}.mp3`;
+    const { error } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .upload(audioPath, mp3, { contentType: "audio/mpeg", upsert: true });
+    if (error) throw new Error(`segment ${i} audio upload: ${error.message}`);
+    return {
+      url: `${supabaseUrl}/storage/v1/object/public/${STORAGE_BUCKET}/${audioPath}`,
+      ms: measureMp3DurationMs(mp3),
+    };
+  };
+
+  // Worker-pool pattern: spawn TTS_CONCURRENCY workers, each pulls the
+  // next pending segment index. Total parallelism is capped.
+  const audioJob = (async (): Promise<AudioResult[]> => {
+    const results: AudioResult[] = new Array(rawSegments.length);
+    let nextIdx = 0;
+    const worker = async () => {
+      while (true) {
+        const i = nextIdx++;
+        if (i >= rawSegments.length) return;
+        results[i] = await runOneSegmentAudio(i);
       }
-      const mp3 = await generateNarration(voiceId, elevenKey, seg.text);
-      const audioPath = `audio/${ideaId}/${i}.mp3`;
-      const { error } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .upload(audioPath, mp3, { contentType: "audio/mpeg", upsert: true });
-      if (error) throw new Error(`segment ${i} audio upload: ${error.message}`);
-      return {
-        url: `${supabaseUrl}/storage/v1/object/public/${STORAGE_BUCKET}/${audioPath}`,
-        ms: measureMp3DurationMs(mp3),
-      };
-    })()
-  );
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(TTS_CONCURRENCY, rawSegments.length) }, worker),
+    );
+    return results;
+  })();
 
   // Per-segment diagnostics: how each backdrop was resolved.
   const visualDiag: string[] = new Array(rawSegments.length).fill("");
@@ -855,7 +881,7 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
 
   // Await everything together.
   const [segmentAudios, visualUrls] = await Promise.all([
-    Promise.all(audioJobs),
+    audioJob,
     Promise.all(visualJobs),
   ]);
 
