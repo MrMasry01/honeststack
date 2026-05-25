@@ -248,8 +248,13 @@ export default function Connections() {
         )}
       </Card>
 
-      {/* ── Instagram (coming soon) ─────────────────────────────── */}
-      <Card style={{ padding: '16px 20px', borderLeft: `3px solid ${C.navyBorder}`, opacity: 0.65 }}>
+      {/* ── Instagram ───────────────────────────────────────────── */}
+      {/* Connected server-side via IG_GRAPH_TOKEN (60-day long-lived
+          token, auto-refreshes on every API call). Same pattern as
+          YouTube — no per-user OAuth needed because HonestStack publishes
+          to a single Meta-app-owned IG account (@honeststack). The
+          posts_queue summary below is read from the live DB. */}
+      <Card style={{ padding: '16px 20px', borderLeft: `3px solid ${C.green}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <div style={{
             width: 44, height: 44, borderRadius: 10,
@@ -262,9 +267,15 @@ export default function Connections() {
             <div style={{ fontSize: 15, color: '#fff', fontWeight: 600, marginBottom: 2 }}>
               Instagram
             </div>
-            <div style={{ fontSize: 12, color: C.slate }}>
-              Coming after TikTok integration is live — requires Meta App + Facebook Page link
+            <div style={{ fontSize: 12, color: C.green }}>
+              ✓ Connected — publishing as @honeststack
             </div>
+          </div>
+          <div style={{
+            fontSize: 11, color: C.slate, padding: '4px 10px',
+            border: `1px solid ${C.navyBorder}`, borderRadius: 6,
+          }}>
+            via Graph API token
           </div>
         </div>
       </Card>
