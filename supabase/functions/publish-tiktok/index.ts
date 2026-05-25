@@ -105,10 +105,35 @@ async function refreshAccessToken(
   };
 }
 
+// TikTok's algo gives diminishing returns past ~5–7 hashtags per caption and
+// rewards relevance over volume. We curate the top 5 from the Core 10 +
+// TikTok-native discovery tags. #fyp and #كورة are TikTok-specific surfaces
+// that don't help on YouTube.
+const TIKTOK_TOP_HASHTAGS = [
+  "WorldCup2026",
+  "كأس_العالم",
+  "كرة_القدم",
+  "fyp",
+  "كورة",
+];
+
+// TikTok caption (title) hard cap. The API accepts more in some endpoints
+// but the inbox/init flow truncates anything over 2200 chars; we stay well
+// under to leave room for the hashtag block.
+const TIKTOK_CAPTION_CAP = 2000;
+
 function buildTitle(idea: Idea | null, asset: Asset): string {
   const raw = idea?.hook ?? asset.caption ?? "أخبار كأس العالم 2026";
-  // TikTok title (or description) cap.
-  return raw.length > 150 ? raw.slice(0, 147) + "..." : raw;
+  // Append asset-specific hashtags first (editorial choices), then top
+  // TikTok-native tags, de-duped. Keep total under the cap.
+  const baseTags = Array.isArray(asset.hashtags) ? asset.hashtags : [];
+  const merged = Array.from(new Set([...baseTags, ...TIKTOK_TOP_HASHTAGS]))
+    .slice(0, 7); // 7 is the upper bound TikTok rewards.
+  const tagBlock = "\n\n" + merged.map((t) => `#${t.replace(/^#/, "")}`).join(" ");
+
+  const maxHookLen = TIKTOK_CAPTION_CAP - tagBlock.length;
+  const hook = raw.length > maxHookLen ? raw.slice(0, maxHookLen - 3) + "..." : raw;
+  return `${hook}${tagBlock}`;
 }
 
 // FILE_UPLOAD init. Returns publish_id + upload_url. We don't use

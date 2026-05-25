@@ -41,7 +41,24 @@ const ELEVENLABS_MODEL = "eleven_multilingual_v2";
 // is rate-limited (preview models carry very tight free-tier quotas).
 const GEMINI_MODELS = ["gemini-3.1-flash-image-preview", "gemini-2.5-flash-image"];
 const OUTRO_HANDLE = "@honeststack";
-const HASHTAGS = ["WorldCup2026", "كأس_العالم"];
+// Core 10 hashtags applied to every video. Mix of broad-English discovery,
+// Arabic regional discovery, Egypt-team identity, and brand. publish-youtube
+// + publish-tiktok layer their own platform-specific tags on top of these.
+const HASHTAGS = [
+  // English — universal football / WC discovery
+  "WorldCup2026",
+  "FIFAWorldCup",
+  "Football",
+  "Soccer",
+  // Arabic — MENA regional discovery
+  "كأس_العالم_2026",
+  "كأس_العالم",
+  "كرة_القدم",
+  "الفراعنة",
+  // Egypt + brand
+  "مصر",
+  "HonestStack",
+];
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 

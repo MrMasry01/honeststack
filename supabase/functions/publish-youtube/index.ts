@@ -59,6 +59,13 @@ const DEFAULT_PRIVACY = "public" as const;
 // https://developers.google.com/youtube/v3/docs/videoCategories/list
 const SPORTS_CATEGORY_ID = "17";
 
+// YouTube Shorts-specific add-ons appended to whatever hashtags are on
+// the asset row. These tell YouTube this is short-form football content
+// and help surface it in Shorts shelf + sports topical recommendations.
+// First 3 hashtags in description become the visible "hashtag chip"
+// above the title — keep "Shorts" first.
+const YOUTUBE_EXTRA_TAGS = ["Shorts", "FootballShorts", "WorldCupShorts"];
+
 type Asset = {
   id: string;
   owner_id: string;
@@ -325,9 +332,11 @@ Deno.serve(async (req: Request) => {
     idea = i;
   }
 
-  const hashtags = Array.isArray(asset.hashtags) && asset.hashtags.length > 0
+  // Merge asset hashtags with YouTube-specific extras, de-duped, in order.
+  const baseHashtags = Array.isArray(asset.hashtags) && asset.hashtags.length > 0
     ? asset.hashtags
-    : ["WorldCup2026", "كأس_العالم", "Shorts"];
+    : ["WorldCup2026", "كأس_العالم"];
+  const hashtags = Array.from(new Set([...YOUTUBE_EXTRA_TAGS, ...baseHashtags]));
   const title = buildVideoTitle(idea, asset);
   const description = buildVideoDescription(idea, asset, hashtags);
 
