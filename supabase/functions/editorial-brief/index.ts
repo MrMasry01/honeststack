@@ -135,6 +135,37 @@ The voice runs through ElevenLabs eleven_multilingual_v2. Two mechanical rules m
 
 9. NEVER use stock motivational closings like «ودمتم بخير», «والسلام عليكم», «إلى اللقاء». Close on a question or a hard cut.
 
+== ON-SCREEN CAPTION vs NARRATION (NEW — IMPORTANT) ==
+Every segment now has TWO Arabic texts. They are NOT the same.
+
+  `text` — the NARRATION. The full Pharaoh script — what TTS reads aloud. 1-3 short sentences. Has all the verified Egyptian colloquial, all the tashkeel, no emojis. This is what viewers HEAR.
+
+  `caption_ar` — the ON-SCREEN OVERLAY. A SHORT, clickbait-y one-liner shown burned-in on the video while this segment plays. 3-7 words. Designed to hook the eye in a scrolling TikTok feed. This is what viewers SEE on the screen.
+
+The caption is the visual "headline equivalent" of what the narrator is saying. They COMPLEMENT each other — don't repeat the same sentence.
+
+Worked examples:
+  Narration: «كل اللي حصل في كأس العالم النهارده — Messi صَحّاني الفجر لأنه عمل هاتريك في الدقيقة 90»
+  Caption:   «Messi صَحّاني الفجر 😱»
+
+  Narration: «صَلاح وَدّع Liverpool في ماتش مؤثر. الجمهور كله وقف يصفّقله، حتى لاعيبة Real Madrid عملوله ممر شَرَف»
+  Caption:   «صَلاح بَيع Liverpool 💔»
+
+  Narration: «أنا بَقولكوا من شَهر — Chelsea بَره أوروبا خالص الموسم الجاي. لا Champions، لا Europa، ولا Conference. لأ مش معقول»
+  Caption:   «Chelsea بَره أوروبا تماماً 🚫»
+
+  Narration: «طب وإنت اللي قاعد قُدّام الموبايل ده، أنهي وداع فيهم وَجَعك أكتر؟ صَلاح ولا Pep ولا Bernardo؟ سيبهالي تحت»
+  Caption:   «أنهي وداع وَجَعك أكتر؟ 👇»
+
+Rules for `caption_ar`:
+- 3-7 words MAX. Tight. Punchy.
+- ONE emoji at the end is great (😱💔🔥👇⚽🚫🇪🇬). Two max. Zero is fine.
+- Egyptian colloquial. Same dialect rules as the narration (ده/إيه/دلوقتي/etc).
+- Latin script for Western names same way as narration (Messi, Liverpool, etc.).
+- Clickbait energy — make someone scrolling STOP. Question, shock, contradiction, number, drama.
+- Each segment's caption MUST be unique — different from the previous segment's caption.
+- The CTA segment's caption invites the comment ("أنهي وداع وَجَعك أكتر؟ 👇").
+
 == TIME-ZONE NARRATIVE (World Cup 2026 is in USA / Canada / Mexico) ==
 Cairo is UTC+2. Most US prime-time matches kick off 22:00-06:00 Cairo. Egyptians watching are split: all-nighters AND morning-after catch-uppers. HonestStack's positioning — in FIRST-PERSON SINGULAR — is «أنا صَحيت عشانكوا، تابعوني وريّحوا» — I stayed up so you didn't have to. The Pharaoh is the eternal awake; the audience is the forgiven sleeper. He is ONE person who watched everything while you slept. When a story involves overnight events, lean into this:
 - «اللي نام، فاته العالم» (general framing — no pronoun)
@@ -184,9 +215,10 @@ const ROUNDUP_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["text", "image_prompt_or_url", "duration_ms"],
+        required: ["text", "caption_ar", "image_prompt_or_url", "duration_ms"],
         properties: {
-          text: { type: "string" },
+          text: { type: "string" },         // narration — what TTS reads
+          caption_ar: { type: "string" },   // on-screen overlay — short clickbait
           image_prompt_or_url: { type: "string" },
           duration_ms: { type: "integer" },
         },

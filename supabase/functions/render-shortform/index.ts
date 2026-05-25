@@ -51,7 +51,8 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 // ---- types -------------------------------------------------
 type ScriptSegment = {
-  text?: string;
+  text?: string;              // narration — what TTS reads (full sentences)
+  caption_ar?: string;        // on-screen caption — short clickbait overlay
   image_prompt?: string;
   image_prompt_or_url?: string;
   image_url?: string;
@@ -547,16 +548,26 @@ Deno.serve(async (req: Request) => {
     const hook = idea.hook ?? "أخبار كأس العالم 2026";
 
     // Normalise segment shape.
-    const rawSegments = idea.script_segments.map((s) => ({
-      text: (s.text ?? "").trim(),
-      promptOrUrl: (s.image_prompt_or_url ?? s.image_prompt ?? s.image_url ?? "")
-        .trim(),
-      durationMs: typeof s.duration_ms === "number"
-        ? s.duration_ms
-        : typeof s.duration_hint_s === "number"
-        ? Math.round(s.duration_hint_s * 1000)
-        : 8000,
-    }));
+    //   `text`        — full narration script (TTS reads this)
+    //   `caption`     — short clickbait on-screen overlay. Falls back to the
+    //                   first ~6 words of `text` for backward compatibility
+    //                   with older ideas that don't have caption_ar yet.
+    const rawSegments = idea.script_segments.map((s) => {
+      const text = (s.text ?? "").trim();
+      const captionExplicit = (s.caption_ar ?? "").trim();
+      const captionFallback = text.split(/\s+/).slice(0, 6).join(" ");
+      return {
+        text,
+        caption: captionExplicit || captionFallback,
+        promptOrUrl: (s.image_prompt_or_url ?? s.image_prompt ?? s.image_url ?? "")
+          .trim(),
+        durationMs: typeof s.duration_ms === "number"
+          ? s.duration_ms
+          : typeof s.duration_hint_s === "number"
+          ? Math.round(s.duration_hint_s * 1000)
+          : 8000,
+      };
+    });
 
     // ---- 2b. mark the assets row 'processing' ---------------
     // The full pipeline (TTS + segment images + render trigger) is heavy
@@ -653,7 +664,7 @@ interface BuildVideoArgs {
   ideaId: string;
   hook: string;
   brief: Brief;
-  rawSegments: { text: string; promptOrUrl: string; durationMs: number }[];
+  rawSegments: { text: string; caption: string; promptOrUrl: string; durationMs: number }[];
 }
 
 async function buildVideo(args: BuildVideoArgs): Promise<void> {
@@ -851,7 +862,11 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
       ? { from: 1.0, to: 1.14 }
       : { from: 1.12, to: 1.0 };
     return {
-      text_ar: seg.text || " ",
+      // Remotion's text_ar field is the ON-SCREEN OVERLAY (not narration).
+      // We now have a dedicated `caption` field per segment (the short
+      // clickbait). Narration `text` continues to go to ElevenLabs as the
+      // spoken script. Fallback to text for legacy ideas without caption.
+      text_ar: seg.caption || seg.text || " ",
       visual_url: visualUrls[i],
       duration_ms: scaled,
       ken_burns: kenBurns,

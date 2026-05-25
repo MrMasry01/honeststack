@@ -15,7 +15,8 @@ const C = {
 }
 
 type ScriptSegment = {
-  text?: string
+  text?: string             // narration — what TTS reads
+  caption_ar?: string       // on-screen overlay — short clickbait
   image_prompt_or_url?: string
   image_prompt?: string
   image_url?: string
@@ -304,6 +305,7 @@ function IdeaCard({ idea, onChanged }: { idea: Idea; onChanged: () => void }) {
   const [draftSegments, setDraftSegments] = useState<ScriptSegment[]>(
     () => (idea.script_segments ?? []).map(s => ({
       text: s.text ?? '',
+      caption_ar: s.caption_ar ?? '',
       image_prompt_or_url: getSegImage(s),
       duration_ms: getSegDurationMs(s),
     }))
@@ -315,6 +317,7 @@ function IdeaCard({ idea, onChanged }: { idea: Idea; onChanged: () => void }) {
       setDraftHook(idea.hook ?? '')
       setDraftSegments((idea.script_segments ?? []).map(s => ({
         text: s.text ?? '',
+        caption_ar: s.caption_ar ?? '',
         image_prompt_or_url: getSegImage(s),
         duration_ms: getSegDurationMs(s),
       })))
@@ -349,6 +352,7 @@ function IdeaCard({ idea, onChanged }: { idea: Idea; onChanged: () => void }) {
     const cleaned = draftSegments
       .map(s => ({
         text: (s.text ?? '').trim(),
+        caption_ar: (s.caption_ar ?? '').trim(),
         image_prompt_or_url: (s.image_prompt_or_url ?? '').trim(),
         duration_ms: Math.max(1000, Math.min(30000, Number(s.duration_ms) || 8000)),
       }))
@@ -382,6 +386,7 @@ function IdeaCard({ idea, onChanged }: { idea: Idea; onChanged: () => void }) {
     setDraftHook(idea.hook ?? '')
     setDraftSegments((idea.script_segments ?? []).map(s => ({
       text: s.text ?? '',
+      caption_ar: s.caption_ar ?? '',
       image_prompt_or_url: getSegImage(s),
       duration_ms: getSegDurationMs(s),
     })))
@@ -400,7 +405,7 @@ function IdeaCard({ idea, onChanged }: { idea: Idea; onChanged: () => void }) {
   function addSegment() {
     setDraftSegments(prev => [
       ...prev,
-      { text: '', image_prompt_or_url: '', duration_ms: 8000 }
+      { text: '', caption_ar: '', image_prompt_or_url: '', duration_ms: 8000 }
     ])
   }
 
@@ -666,12 +671,22 @@ function IdeaCard({ idea, onChanged }: { idea: Idea; onChanged: () => void }) {
                 </div>
               </div>
 
-              <FormField label="TEXT (Arabic)" small>
+              <FormField label="NARRATION — what TTS reads (full Egyptian script)" small>
                 <textarea
                   value={s.text ?? ''}
                   onChange={e => setSegment(i, { text: e.target.value })}
                   dir="auto"
                   rows={2}
+                  style={inputStyle}
+                />
+              </FormField>
+
+              <FormField label="ON-SCREEN CAPTION — short clickbait (3-7 words, optional emoji)" small>
+                <input
+                  value={s.caption_ar ?? ''}
+                  onChange={e => setSegment(i, { caption_ar: e.target.value })}
+                  dir="auto"
+                  placeholder={'e.g. «صَلاح بَيع Liverpool 💔»'}
                   style={inputStyle}
                 />
               </FormField>
