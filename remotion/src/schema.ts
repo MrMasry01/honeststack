@@ -15,6 +15,21 @@ export const KenBurnsSchema = z.object({
     .describe("Scale at segment end"),
 });
 
+export const PharaohPoseEnum = z.enum([
+  "idle-talk",
+  "peek-left",
+  "peek-right",
+  "point-up-right",
+  "point-down",
+  "surprised",
+  "sarcastic-shrug",
+  "count-fingers",
+  "walk-in-left",
+  "walk-out-right",
+  "crying",
+  "celebrating",
+]);
+
 export const SegmentSchema = z.object({
   text_ar: z
     .string()
@@ -39,6 +54,13 @@ export const SegmentSchema = z.object({
     .describe("Segment duration in milliseconds (6000–12000 typical)"),
   ken_burns: KenBurnsSchema.optional().describe(
     "Ken Burns zoom effect on backdrop"
+  ),
+  pharaoh_pose: PharaohPoseEnum.optional().describe(
+    "Optional Pharaoh pose for this segment. When omitted (or 'idle-talk'), " +
+    "the default audio-driven mouth-swap talking Pharaoh is rendered. Other " +
+    "values render the matching pose PNG from public/poses/ with its own " +
+    "entry animation — peek-left/peek-right enter from edges, walk-in-left " +
+    "walks across, point-up-right points at the photo, etc."
   ),
 });
 

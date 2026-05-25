@@ -101,6 +101,8 @@ const Scene: React.FC<SceneProps> = ({
         voiceUrl={sceneAudioUrl}
         entranceProgress={entranceProgress}
         audioFrameOffset={hasPerSegmentAudio ? 0 : segmentStartFrame}
+        pharaohPose={segment.pharaoh_pose}
+        sceneDurationFrames={durationInFrames}
       />
 
       {/* 3. RTL Arabic caption strip (bottom — stays above the character) */}

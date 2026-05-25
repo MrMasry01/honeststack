@@ -88,6 +88,29 @@ World Cup 2026 kicks off June 11, 2026 in Mexico City. The user message will tel
 - During the FINAL WEEK: "أنا قاعد أتفرّج معاكوا" tone — the Pharaoh is now ALONGSIDE the audience, not ahead of them.
 The countdown is also a viewer-retention loop: when the viewer knows "هَيرجع بعد 6 ساعات"، they come back. Make the cadence visible in every roundup.
 
+== PHARAOH POSE (per-segment animation hint) ==
+Each segment may optionally carry a pharaoh_pose. The Remotion renderer swaps the on-screen Pharaoh mascot to the matching pose PNG with a tailored entry animation — peek-left/right slide in from the edges, walk-in-left walks across, point-up-right points at the photo, surprised pops in with shock, etc. Picking the right pose per segment makes the videos feel directed, not auto-generated. Pick from:
+
+  - idle-talk        — DEFAULT. Standard talking-Pharaoh with mouth-swap lip sync, gliding across the lower band. Use when no specific reaction fits.
+  - peek-left        — Pharaoh peeks in from the LEFT edge, looking right. Use for "look what I found" reveal moments, secrets, hidden info, "did you see this" beats.
+  - peek-right       — Same from the right. Alternate with peek-left for visual variety across the roundup.
+  - point-up-right   — Pharaoh points UP at the upper-right where the segment photo sits. Use when the narrator is explicitly drawing attention to the visual ("شُف الصورة دي", "بُص هنا").
+  - point-down       — Both hands pointing down at the caption strip. Use for STAT reveals where the number/fact is bait ("الرقم اللي هَيوجَعك..." → reveal in caption).
+  - surprised        — Big shocked O-mouth, hands raised. Use for DRAMA / SHOCK beats ("إيه ده؟!", "مش معقول!", red cards, last-minute goals, upsets).
+  - sarcastic-shrug  — The Bassem flat-shrug. Use for SARCASM / "told-you-so" / "حلو الكلام ده" / mocking failures.
+  - count-fingers    — Holds up fingers to count. Use for LIST-style segments ("تلات أهداف!", numbered countdowns, ranked stats).
+  - walk-in-left     — Walks in mid-stride from the left. Use ONLY for the OPENING segment of a roundup — the Pharaoh "arrives" with the news.
+  - walk-out-right   — Walks out toward the right, waves goodbye. Use ONLY for the CLOSING/CTA segment — the Pharaoh leaves the viewer with the question.
+  - crying           — Comically sad. Use for LOSS / DEPARTURE / DEFEAT beats ("صلاح وَدّع", a star retiring, a team eliminated).
+  - celebrating      — Both arms raised in victory. Use for WIN / GOAL / TROPHY beats ("هاتريك!", "كأس!", trophy lifts).
+
+Rules:
+  1. Opener segment (#1) → walk-in-left if it's a "here's what happened" reveal; otherwise idle-talk.
+  2. CTA segment (last) → walk-out-right. Always.
+  3. At least 3 different non-idle poses per 5-7 segment roundup — variety carries the video.
+  4. Never two consecutive segments with the same pose. Vary even when both are e.g. drama beats (use surprised then point-up-right).
+  5. If unsure, default to idle-talk. Mediocre pose < no pose.
+
 == ANTI-DUPLICATION ==
 The source pool you receive has been pre-filtered to exclude sources already cited in any prior roundup. So you will not see duplicate raw sources. But also:
   - Two sources covering the SAME event → MERGE into one segment carrying both angles, never split.
@@ -266,6 +289,14 @@ const ROUNDUP_SCHEMA = {
           caption_ar: { type: "string" },   // on-screen overlay — short clickbait
           image_prompt_or_url: { type: "string" },
           duration_ms: { type: "integer" },
+          pharaoh_pose: {
+            type: "string",
+            enum: [
+              "idle-talk", "peek-left", "peek-right", "point-up-right",
+              "point-down", "surprised", "sarcastic-shrug", "count-fingers",
+              "walk-in-left", "walk-out-right", "crying", "celebrating",
+            ],
+          },
         },
       },
     },

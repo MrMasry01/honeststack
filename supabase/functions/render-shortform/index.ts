@@ -75,6 +75,7 @@ type ScriptSegment = {
   image_url?: string;
   duration_ms?: number;
   duration_hint_s?: number;
+  pharaoh_pose?: string;      // optional pose hint passed through to renderer
 };
 
 type Brief = {
@@ -90,6 +91,7 @@ type BuiltSegment = {
   audio_url: string;    // per-segment TTS MP3 — Remotion plays only during this scene
   duration_ms: number;  // set to actual MP3 duration so audio + visual stay synced
   ken_burns: { from: number; to: number };
+  pharaoh_pose?: string; // optional pose hint — Remotion swaps to matching pose PNG
 };
 
 // ---- MP3 duration ------------------------------------------
@@ -658,6 +660,7 @@ Deno.serve(async (req: Request) => {
           : typeof s.duration_hint_s === "number"
           ? Math.round(s.duration_hint_s * 1000)
           : 8000,
+        pharaohPose: typeof s.pharaoh_pose === "string" ? s.pharaoh_pose : undefined,
       };
     });
 
@@ -756,7 +759,7 @@ interface BuildVideoArgs {
   ideaId: string;
   hook: string;
   brief: Brief;
-  rawSegments: { text: string; caption: string; promptOrUrl: string; durationMs: number }[];
+  rawSegments: { text: string; caption: string; promptOrUrl: string; durationMs: number; pharaohPose?: string }[];
 }
 
 async function buildVideo(args: BuildVideoArgs): Promise<void> {
@@ -1051,14 +1054,12 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
       : { from: 1.12, to: 1.0 };
     return {
       // Remotion's text_ar field is the ON-SCREEN OVERLAY (not narration).
-      // The dedicated `caption` field per segment (the short clickbait)
-      // goes here. Narration `text` is what TTS read. Fallback to text for
-      // legacy ideas without caption.
       text_ar: seg.caption || seg.text || " ",
       audio_url: audio?.url ?? "",
       visual_url: visualUrls[i],
       duration_ms: durationMs,
       ken_burns: kenBurns,
+      pharaoh_pose: seg.pharaohPose,
     };
   });
 
