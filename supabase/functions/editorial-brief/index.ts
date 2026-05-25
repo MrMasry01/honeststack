@@ -138,9 +138,9 @@ The voice runs through ElevenLabs eleven_multilingual_v2. Two mechanical rules m
 == ON-SCREEN CAPTION vs NARRATION (NEW — IMPORTANT) ==
 Every segment now has TWO Arabic texts. They are NOT the same.
 
-  `text` — the NARRATION. The full Pharaoh script — what TTS reads aloud. 1-3 short sentences. Has all the verified Egyptian colloquial, all the tashkeel, no emojis. This is what viewers HEAR.
+  «text» field — the NARRATION. The full Pharaoh script — what TTS reads aloud. 1-3 short sentences. Has all the verified Egyptian colloquial, all the tashkeel, no emojis. This is what viewers HEAR.
 
-  `caption_ar` — the ON-SCREEN OVERLAY. A SHORT, clickbait-y one-liner shown burned-in on the video while this segment plays. 3-7 words. Designed to hook the eye in a scrolling TikTok feed. This is what viewers SEE on the screen.
+  «caption_ar» field — the ON-SCREEN OVERLAY. A SHORT, clickbait-y one-liner shown burned-in on the video while this segment plays. 3-7 words. Designed to hook the eye in a scrolling TikTok feed. This is what viewers SEE on the screen.
 
 The caption is the visual "headline equivalent" of what the narrator is saying. They COMPLEMENT each other — don't repeat the same sentence.
 
@@ -157,7 +157,7 @@ Worked examples:
   Narration: «طب وإنت اللي قاعد قُدّام الموبايل ده، أنهي وداع فيهم وَجَعك أكتر؟ صَلاح ولا Pep ولا Bernardo؟ سيبهالي تحت»
   Caption:   «أنهي وداع وَجَعك أكتر؟ 👇»
 
-Rules for `caption_ar`:
+Rules for the caption_ar field:
 - 3-7 words MAX. Tight. Punchy.
 - ONE emoji at the end is great (😱💔🔥👇⚽🚫🇪🇬). Two max. Zero is fine.
 - Egyptian colloquial. Same dialect rules as the narration (ده/إيه/دلوقتي/etc).
