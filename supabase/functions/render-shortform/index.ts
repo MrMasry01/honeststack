@@ -990,8 +990,9 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
     if (insErr) throw new Error(`assets insert: ${insErr.message}`);
   }
 
+  const totalAudioMs = segmentAudios.reduce((acc, a) => acc + (a?.ms ?? 0), 0);
   console.log(
     `[${ideaId}] render triggered — job ${jobId}, ` +
-      `${builtSegments.length} segments, audio ${audioMs}ms`,
+      `${builtSegments.length} segments, total audio ${totalAudioMs}ms`,
   );
 }
