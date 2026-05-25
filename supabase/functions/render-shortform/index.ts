@@ -796,14 +796,59 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
     return `${supabaseUrl}/storage/v1/object/public/${STORAGE_BUCKET}/${imgPath}`;
   };
 
+  // Twitter's video CDN (video.twimg.com) returns 403 when Remotion on
+  // Railway tries to fetch the .mp4 directly — twitter checks the Referer
+  // and rejects external pulls. We work around it by downloading from THIS
+  // edge function (with proper Twitter Referer header) and mirroring the
+  // bytes into Supabase storage. Remotion then fetches from a Supabase URL
+  // which is always reachable.
+  const mirrorTwitterVideo = async (twitterUrl: string, i: number): Promise<string> => {
+    const res = await fetch(twitterUrl, {
+      headers: {
+        "Referer": "https://twitter.com/",
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+      },
+      signal: AbortSignal.timeout(45_000),
+    });
+    if (!res.ok) {
+      throw new Error(`twitter video fetch ${res.status} for ${twitterUrl}`);
+    }
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const path = `videos-mirrored/${ideaId}/${i}.mp4`;
+    const { error } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .upload(path, bytes, { contentType: "video/mp4", upsert: true });
+    if (error) throw new Error(`mirror upload (${i}): ${error.message}`);
+    return `${supabaseUrl}/storage/v1/object/public/${STORAGE_BUCKET}/${path}`;
+  };
+
   const visualJobs = rawSegments.map((seg, i) =>
     (async (): Promise<string> => {
       const raw = seg.promptOrUrl;
 
-      // Explicit URL — use directly.
+      // Explicit URL — use directly... unless it's a Twitter video, in which
+      // case we have to mirror it to Supabase (their CDN rejects external
+      // fetches with 403). If the mirror fails, fall through to AI gen so
+      // the segment still has a visual.
       if (/^https?:\/\//i.test(raw)) {
-        visualDiag[i] = "explicit-url";
-        return raw;
+        const isTwitterVideo = /video\.twimg\.com/.test(raw) && /\.mp4(\?|$)/i.test(raw);
+        if (isTwitterVideo) {
+          try {
+            const mirrored = await mirrorTwitterVideo(raw, i);
+            visualDiag[i] = "twitter-video-mirrored";
+            return mirrored;
+          } catch (err) {
+            console.error(
+              `[${i}] mirror twitter video failed, falling back to AI scene: `,
+              err instanceof Error ? err.message : String(err),
+            );
+            // Fall through to AI image generation below.
+          }
+        } else {
+          visualDiag[i] = "explicit-url";
+          return raw;
+        }
       }
 
       // person:<Name> — a real, verified photo of that specific person.
@@ -842,7 +887,16 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
       }
 
       // A scene/concept prompt — AI generation, Pexels scene fallback.
-      const prompt = raw || `World Cup 2026 football moment, scene ${i + 1}`;
+      // When falling through from a failed Twitter video mirror, `raw` is
+      // a video URL — don't pass that as an AI prompt. Use the segment's
+      // own narration text (descriptive of the moment) instead.
+      const promptFromText = (seg.text ?? "").trim();
+      const looksLikeUrl = /^https?:\/\//i.test(raw);
+      const prompt = (raw && !looksLikeUrl)
+        ? raw
+        : (promptFromText
+          ? `Sports news moment: ${promptFromText.slice(0, 120)}`
+          : `World Cup 2026 football moment, scene ${i + 1}`);
       let png: Uint8Array | null = null;
       try {
         png = await Promise.race([
