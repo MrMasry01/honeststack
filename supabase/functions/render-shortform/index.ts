@@ -521,15 +521,31 @@ Deno.serve(async (req: Request) => {
       for (const cand of candidates ?? []) {
         const { data: existing, error: assetErr } = await supabase
           .from("assets")
-          .select("id, media")
+          .select("id, media, updated_at")
           .eq("idea_id", cand.id)
           .eq("owner_id", OWNER_ID);
         if (assetErr) throw new Error(`assets query: ${assetErr.message}`);
+
         const hasDone = (existing ?? []).some(
           (a: { media: { status?: string } | null }) =>
             a.media?.status === "done",
         );
-        if (!hasDone) {
+        // An idea is unavailable if it's currently being rendered (someone
+        // already kicked off a pipeline within the last 15 min). The
+        // per-idea guard below will catch the race anyway, but skipping
+        // here lets the scheduler move on to the *next* ready idea instead
+        // of returning "already in flight".
+        const hasFreshInflight = (existing ?? []).some(
+          (
+            a: { media: { status?: string } | null; updated_at: string },
+          ) => {
+            const status = a.media?.status;
+            if (status !== "processing" && status !== "rendering") return false;
+            const mins = (Date.now() - new Date(a.updated_at).getTime()) / 60000;
+            return mins < 15;
+          },
+        );
+        if (!hasDone && !hasFreshInflight) {
           idea = cand;
           break;
         }
@@ -543,6 +559,64 @@ Deno.serve(async (req: Request) => {
       return jsonResponse(
         { ok: true, skipped: "idea has no script_segments", idea_id: idea.id },
       );
+    }
+
+    // ---- 2a. concurrent-render guard ------------------------
+    // The scheduler fires every few minutes. Without this check, an idea
+    // that takes >2 min to render gets picked up again on the next tick
+    // (its asset is still 'processing', not 'done') and we kick off a
+    // second, parallel pipeline that competes for ElevenLabs quota,
+    // duplicates Remotion jobs, and ultimately overwrites the same row.
+    //
+    // We look at the most recent asset for this idea. If it's in-flight
+    // (processing or rendering) AND was updated within the last 15 min,
+    // skip — a worker is already on it. Older in-flight rows are orphans
+    // (Remotion died, edge function got killed mid-pipeline) so we let
+    // this call proceed and overwrite.
+    {
+      const { data: latestAsset } = await supabase
+        .from("assets")
+        .select("id, media, updated_at")
+        .eq("idea_id", idea.id)
+        .eq("owner_id", OWNER_ID)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (latestAsset) {
+        const media = (latestAsset.media as
+          | { status?: string; job_id?: string }
+          | null) ?? {};
+        const status = media.status;
+        const isInflight = status === "processing" || status === "rendering";
+        const minSinceUpdate =
+          (Date.now() - new Date(latestAsset.updated_at).getTime()) / 60000;
+        const isFresh = minSinceUpdate < 15;
+
+        if (isInflight && isFresh) {
+          console.log(
+            `[${idea.id}] skipping — already ${status} for ${
+              minSinceUpdate.toFixed(1)
+            } min (job_id=${media.job_id ?? "n/a"})`,
+          );
+          return jsonResponse({
+            ok: true,
+            skipped: "already in flight",
+            idea_id: idea.id,
+            existing_status: status,
+            existing_job_id: media.job_id ?? null,
+            minutes_since_update: Number(minSinceUpdate.toFixed(1)),
+          });
+        }
+
+        if (isInflight && !isFresh) {
+          console.log(
+            `[${idea.id}] reclaiming orphan — last update ${
+              minSinceUpdate.toFixed(1)
+            } min ago, status=${status}`,
+          );
+        }
+      }
     }
 
     const ideaId = idea.id;
