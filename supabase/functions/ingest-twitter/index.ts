@@ -80,26 +80,44 @@ function extractMediaUrls(item: Record<string, unknown>): string[] {
     const type = String(media.type ?? "").toLowerCase();
 
     if (type === "video" || type === "animated_gif") {
-      // Pull the highest-bitrate MP4 variant from video_info.variants.
+      // Pick a SENSIBLE MP4 variant — NOT the highest-bitrate 4K master.
+      // Twitter video URLs encode the resolution in the path like
+      // /amplify_video/<id>/vid/avc1/<width>x<height>/<file>.mp4. The
+      // highest-bitrate variant is often 1440x2560 or larger — when our
+      // 1080x1920 Remotion render tries to decode that with OffthreadVideo,
+      // the Compositor subprocess SIGKILLs from memory pressure.
+      //
+      // Strategy: filter to variants ≤1080px wide, then take the highest
+      // bitrate of those. If nothing fits, take the LOWEST bitrate variant
+      // (avoid the 4K master — better to render a 360p backdrop than crash).
       const videoInfo = media.video_info as Record<string, unknown> | undefined;
       const variants = videoInfo?.variants as
         | Array<Record<string, unknown>>
         | undefined;
-      if (Array.isArray(variants)) {
-        const mp4Variants = variants
-          .filter(
-            (v) =>
-              v.content_type === "video/mp4" && typeof v.url === "string",
-          )
-          .map((v) => ({
+      if (!Array.isArray(variants)) continue;
+
+      // Extract bitrate + width per variant (width parsed from URL path).
+      const mp4Variants = variants
+        .filter(
+          (v) => v.content_type === "video/mp4" && typeof v.url === "string",
+        )
+        .map((v) => {
+          const url = v.url as string;
+          const dim = /\/(\d{2,4})x\d{2,4}\//.exec(url);
+          return {
             bitrate: Number(v.bitrate) || 0,
-            url: v.url as string,
-          }))
-          .sort((a, b) => b.bitrate - a.bitrate);
-        if (mp4Variants.length > 0) {
-          urls.add(mp4Variants[0].url);
-        }
-      }
+            width: dim ? Number(dim[1]) : 0,
+            url,
+          };
+        });
+      if (mp4Variants.length === 0) continue;
+
+      const safe = mp4Variants
+        .filter((v) => v.width === 0 || v.width <= 1080)
+        .sort((a, b) => b.bitrate - a.bitrate);
+      const chosen = safe[0]
+        ?? mp4Variants.slice().sort((a, b) => a.bitrate - b.bitrate)[0];
+      if (chosen?.url) urls.add(chosen.url);
       continue;
     }
 
