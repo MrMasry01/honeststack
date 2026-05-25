@@ -128,6 +128,7 @@ Deno.serve(async (req: Request) => {
     render: null,
     youtube: null,
     tiktok: null,
+    instagram: null,
   };
 
   // ---- 1. RENDER ---------------------------------------------
@@ -262,6 +263,45 @@ Deno.serve(async (req: Request) => {
     }
   } catch (err) {
     summary.tiktok = {
+      fired: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  // ---- 4. PUBLISH INSTAGRAM ---------------------------------
+  // No per-account check (single channel-level token like YouTube).
+  // publish-instagram polls the container synchronously for up to
+  // 2 min — that's within the auto-scheduler's edge-function budget.
+  try {
+    const { data: doneAssets } = await supabase
+      .from("assets")
+      .select("id, owner_id, idea_id, media, created_at")
+      .eq("owner_id", OWNER_ID)
+      .order("created_at", { ascending: true })
+      .limit(50);
+
+    const igTarget = await pickUnpublished(
+      supabase,
+      (doneAssets ?? []) as AssetRow[],
+      "instagram",
+    );
+
+    if (igTarget) {
+      const r = await fireEdgeFunction(
+        supabaseUrl,
+        "publish-instagram",
+        ingestSecret,
+        { asset_id: igTarget.id, owner_id: OWNER_ID },
+      );
+      summary.instagram = { fired: true, asset_id: igTarget.id, ...r };
+    } else {
+      summary.instagram = {
+        fired: false,
+        reason: "no current-pipeline done assets needing instagram",
+      };
+    }
+  } catch (err) {
+    summary.instagram = {
       fired: false,
       error: err instanceof Error ? err.message : String(err),
     };
