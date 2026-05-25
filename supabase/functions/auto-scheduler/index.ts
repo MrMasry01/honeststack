@@ -46,6 +46,29 @@ type AssetRow = {
   media: { status?: string; video_url?: string } | null;
 };
 
+// The "current pipeline" watershed.
+//
+// Old assets exist that were rendered before the caption-split + per-segment
+// audio + cloned-voice upgrades — those scripts use first-person plural,
+// generic Pexels visuals, and the original (uncloned) voice. We MUST NOT
+// re-publish them now that we have a continuous auto-publish loop.
+//
+// The cleanest signal is that the source content_idea has caption_ar on at
+// least one segment (only the new editorial-brief emits that field). If
+// the idea is missing or has no caption_ar, the asset is considered stale.
+function ideaHasCaptionAr(
+  scriptSegments: unknown,
+): boolean {
+  if (!Array.isArray(scriptSegments)) return false;
+  for (const seg of scriptSegments) {
+    if (seg && typeof seg === "object") {
+      const cap = (seg as Record<string, unknown>).caption_ar;
+      if (typeof cap === "string" && cap.trim() !== "") return true;
+    }
+  }
+  return false;
+}
+
 async function fireEdgeFunction(
   baseUrl: string,
   name: string,
@@ -108,14 +131,14 @@ Deno.serve(async (req: Request) => {
   };
 
   // ---- 1. RENDER ---------------------------------------------
-  // Look for a ready idea that doesn't yet have a 'done' asset.
-  // We just count candidates here — render-shortform's own picker
-  // (without idea_id) selects the newest and applies its own
-  // concurrent-render guard. We fire only if at least one exists.
+  // Look for a ready, CURRENT-PIPELINE idea that doesn't yet have
+  // a 'done' asset. Stale ideas have been archived (status='archived'
+  // is excluded by render-shortform's picker) but we double-check
+  // caption_ar here as defence in depth.
   try {
     const { data: candidates } = await supabase
       .from("content_ideas")
-      .select("id")
+      .select("id, script_segments")
       .eq("owner_id", OWNER_ID)
       .eq("status", "ready")
       .not("script_segments", "is", null)
@@ -124,6 +147,8 @@ Deno.serve(async (req: Request) => {
 
     let needsRender = false;
     for (const c of candidates ?? []) {
+      if (!ideaHasCaptionAr(c.script_segments)) continue;
+
       const { data: existing } = await supabase
         .from("assets")
         .select("id, media")
@@ -148,7 +173,10 @@ Deno.serve(async (req: Request) => {
       );
       summary.render = { fired: true, ...r };
     } else {
-      summary.render = { fired: false, reason: "no ready ideas without done assets" };
+      summary.render = {
+        fired: false,
+        reason: "no current-pipeline ready ideas without done assets",
+      };
     }
   } catch (err) {
     summary.render = {
@@ -259,6 +287,17 @@ async function pickUnpublished(
   for (const a of doneAssets) {
     if (a.media?.status !== "done") continue;
     if (!a.media?.video_url) continue;
+    if (!a.idea_id) continue;
+
+    // Watershed: only consider assets whose source idea is current-pipeline
+    // (has at least one segment with caption_ar). Skip stale renders.
+    const { data: idea } = await supabase
+      .from("content_ideas")
+      .select("script_segments")
+      .eq("id", a.idea_id)
+      .maybeSingle();
+    if (!idea || !ideaHasCaptionAr(idea.script_segments)) continue;
+
     const { data: existing } = await supabase
       .from("posts_queue")
       .select("status")
