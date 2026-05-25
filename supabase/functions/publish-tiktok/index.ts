@@ -237,31 +237,51 @@ Deno.serve(async (req: Request) => {
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const clientKey = Deno.env.get("TIKTOK_CLIENT_KEY");
   const clientSecret = Deno.env.get("TIKTOK_CLIENT_SECRET");
+  const ingestSecret = Deno.env.get("INGEST_SECRET");
   if (!supabaseUrl || !serviceKey || !anonKey || !clientKey || !clientSecret) {
     return json({ ok: false, error: "server misconfigured" }, 500);
   }
 
-  // ---- auth: user JWT ------------------------------------------
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const userJwt = authHeader.toLowerCase().startsWith("bearer ")
-    ? authHeader.slice(7).trim()
-    : "";
-  if (!userJwt) return json({ ok: false, error: "unauthorized" }, 401);
+  // ---- auth: user JWT  OR  service-side ingest secret ----------
+  // The cockpit "Publish to TikTok" button forwards the user's JWT.
+  // The auto-scheduler edge function calls us server-side with the
+  // shared INGEST_SECRET and an explicit owner_id in the body.
+  let userId: string;
+  const incomingSecret = req.headers.get("x-ingest-secret") ?? "";
+  const isServiceCall = Boolean(ingestSecret) && incomingSecret === ingestSecret;
 
-  const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: `Bearer ${userJwt}` } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { data: userResp, error: userErr } = await userClient.auth.getUser(userJwt);
-  if (userErr || !userResp?.user) return json({ ok: false, error: "invalid JWT" }, 401);
-  const userId = userResp.user.id;
-
-  let body: { asset_id?: unknown };
+  let body: { asset_id?: unknown; owner_id?: unknown };
   try {
     body = await req.json();
   } catch {
     return json({ ok: false, error: "body must be JSON" }, 400);
   }
+
+  if (isServiceCall) {
+    const callerOwner = typeof body?.owner_id === "string" ? body.owner_id : "";
+    if (!callerOwner) {
+      return json(
+        { ok: false, error: "service call requires owner_id in body" },
+        400,
+      );
+    }
+    userId = callerOwner;
+  } else {
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const userJwt = authHeader.toLowerCase().startsWith("bearer ")
+      ? authHeader.slice(7).trim()
+      : "";
+    if (!userJwt) return json({ ok: false, error: "unauthorized" }, 401);
+
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: `Bearer ${userJwt}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data: userResp, error: userErr } = await userClient.auth.getUser(userJwt);
+    if (userErr || !userResp?.user) return json({ ok: false, error: "invalid JWT" }, 401);
+    userId = userResp.user.id;
+  }
+
   const assetId = typeof body?.asset_id === "string" ? body.asset_id : "";
   if (!assetId) return json({ ok: false, error: "asset_id required" }, 400);
 

@@ -239,32 +239,52 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  // ---- auth: user JWT ------------------------------------------
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const userJwt = authHeader.toLowerCase().startsWith("bearer ")
-    ? authHeader.slice(7).trim()
-    : "";
-  if (!userJwt) {
-    return json({ ok: false, error: "unauthorized: no JWT" }, 401);
-  }
-
-  const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: `Bearer ${userJwt}` } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const { data: userResp, error: userErr } = await userClient.auth.getUser(userJwt);
-  if (userErr || !userResp?.user) {
-    return json({ ok: false, error: "unauthorized: invalid JWT" }, 401);
-  }
-  const userId = userResp.user.id;
-
-  // ---- body: asset_id ------------------------------------------
-  let body: { asset_id?: unknown };
+  // ---- auth: user JWT  OR  service-side ingest secret ----------
+  // The cockpit "Publish to YouTube" button forwards the user's JWT.
+  // The auto-scheduler edge function calls us server-side with the
+  // shared INGEST_SECRET and an explicit owner_id in the body.
+  const ingestSecret = Deno.env.get("INGEST_SECRET") ?? "";
+  let body: { asset_id?: unknown; owner_id?: unknown };
   try {
     body = await req.json();
   } catch {
     return json({ ok: false, error: "bad request: body must be JSON" }, 400);
   }
+
+  let userId: string;
+  const incomingSecret = req.headers.get("x-ingest-secret") ?? "";
+  const isServiceCall = Boolean(ingestSecret) && incomingSecret === ingestSecret;
+
+  if (isServiceCall) {
+    const callerOwner = typeof body?.owner_id === "string" ? body.owner_id : "";
+    if (!callerOwner) {
+      return json(
+        { ok: false, error: "service call requires owner_id in body" },
+        400,
+      );
+    }
+    userId = callerOwner;
+  } else {
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const userJwt = authHeader.toLowerCase().startsWith("bearer ")
+      ? authHeader.slice(7).trim()
+      : "";
+    if (!userJwt) {
+      return json({ ok: false, error: "unauthorized: no JWT" }, 401);
+    }
+
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: `Bearer ${userJwt}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data: userResp, error: userErr } = await userClient.auth.getUser(userJwt);
+    if (userErr || !userResp?.user) {
+      return json({ ok: false, error: "unauthorized: invalid JWT" }, 401);
+    }
+    userId = userResp.user.id;
+  }
+
+  // ---- body: asset_id ------------------------------------------
   const assetId = typeof body?.asset_id === "string" ? body.asset_id : "";
   if (!assetId) {
     return json({ ok: false, error: "bad request: asset_id (string) is required" }, 400);
