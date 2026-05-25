@@ -103,7 +103,7 @@ export const OutroCard: React.FC<OutroCardProps> = ({
         </div>
       </div>
 
-      {/* CTA Arabic text */}
+      {/* CTA Arabic text — cadence promise: viewer knows when to come back */}
       <div
         dir="rtl"
         lang="ar"
@@ -112,15 +112,28 @@ export const OutroCard: React.FC<OutroCardProps> = ({
         <p
           style={{
             fontFamily: "Cairo, sans-serif",
-            fontWeight: 700,
-            fontSize: 44,
-            color: "#FFFFFFCC",
-            margin: "0 0 32px",
-            lineHeight: 1.4,
+            fontWeight: 800,
+            fontSize: 48,
+            color: "#FFFFFF",
+            margin: "0 0 12px",
+            lineHeight: 1.3,
             textShadow: "0 2px 12px rgba(0,0,0,0.8)",
           }}
         >
-          تابعونا لأحدث أخبار كأس العالم
+          تابعوني — أنا بَنزّل
+        </p>
+        <p
+          style={{
+            fontFamily: "Cairo, sans-serif",
+            fontWeight: 700,
+            fontSize: 38,
+            color: brand.accent,
+            margin: "0 0 32px",
+            lineHeight: 1.3,
+            textShadow: `0 2px 12px ${brand.accent}55`,
+          }}
+        >
+          ٤ مرّات في اليوم
         </p>
       </div>
 

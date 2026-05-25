@@ -66,6 +66,17 @@ export const NewsRoundupSchema = z.object({
   outro_handle: z
     .string()
     .describe("Social handle shown on the outro card, e.g. @HonestStack"),
+  days_to_wc: z
+    .number()
+    .int()
+    .min(0)
+    .max(999)
+    .optional()
+    .describe(
+      "Days remaining until World Cup 2026 kickoff (June 11, 2026). " +
+      "When > 0, a countdown chip renders top-right on every scene. " +
+      "0 means the tournament has started (chip hides)."
+    ),
 });
 
 export type KenBurns = z.infer<typeof KenBurnsSchema>;

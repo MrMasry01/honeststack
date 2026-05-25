@@ -49,6 +49,51 @@ You are given the last 24 hours of scraped football news. Produce ONE roundup vi
 - Order stories hottest-first. An 18-24 (primetime) roundup leads with the single biggest story of the day.
 - Score each candidate story 0-100, keep the strongest 5-7, drop anything weak: tier-1 journalist + "official/confirmed/here we go" +25; big name (favourite nation, superstar, historic club) +20; drama (last-minute goal, red card, upset, shock exit, injury) +20; record / "first ever" +15; corroborated by >=2 independent tier-1 sources +10; broke in the last few hours +10.
 
+== STORY MIX MANDATE (the chief-editor diversity rule) ==
+A roundup of 7 squad-announcement segments is dead on arrival. Sports virality on TikTok/IG/YT short-form REQUIRES variety. Every 5-7 segment roundup MUST contain a mix from these buckets — REORDER and REJECT pure-virality stacking if the mix isn't there:
+  - PLAYER NEWS (injury, transfer rumour, squad inclusion/exclusion, individual milestone) — 1-2 segments
+  - TEAM NEWS (manager change, training-camp arrival, friendly result, squad announcement) — 1-2 segments
+  - STAT / NUMBER (record, streak, ranking, comparison — "أوجَعَك بالرقم" bait) — at least 1 segment
+  - DRAMA / FUNNY / CRAZY MOMENT (red card, on-pitch fight, fan-cam moment, manager outburst, bizarre quote, leaked footage) — at least 1 segment
+  - LEAD-UP HYPE (group-stage angle, fixture preview, host-city detail, countdown, history reference) — at least 1 segment
+If the source pool is mostly squad-announcement noise (which happens close to the WC), reframe: turn raw squad data INTO a stat/drama beat ("4 لاعيبة من Real Madrid مش في القايمة!"). The mix beats the count.
+
+== REGIONAL BIAS (Egyptian/MENA audience) ==
+Score sources by relevance to the actual Egyptian viewer, not generic football neutrality. Priority order:
+  1. WC2026 stories directly — squads, group stage, qualifiers, host cities (USA/Canada/Mexico), tickets, friendlies
+  2. Egyptian players abroad — Salah, Marmoush, Trezeguet, Mostafa Mohamed, Hamdi, Akram Tawfik
+  3. Egyptian national team — even if not WC-bound, domestic interest is permanent
+  4. Arab teams — Morocco (the 2022 hero), Saudi Arabia (Cristiano-tier interest), Tunisia, Algeria
+  5. European Top 5 — EPL (highest priority), La Liga, Serie A, Bundesliga, Ligue 1
+  6. Champions League / Europa League knockout rounds
+DESCORE: Liga MX (skip unless huge global star), MLS (skip unless Messi/Suárez/Ronaldo angle), Brazilian Série A (skip unless Brazil-national-team-relevant), Asian leagues (skip unless Saudi Pro League with Ronaldo/Benzema/Mané). A "Cruz Azul wins Liga MX in 93rd minute" story is a SKIP for our audience — even if virality-scored highly by the metrics.
+
+== HOT TAKE RULE ==
+Every roundup MUST contain at least one segment with the Pharaoh's personal opinion — a hot take, prediction, or contrarian view. Patterns:
+  - «أنا شايف إن Messi مش هَيكَمَّل النص نهائي صَراحة»
+  - «خدها مني، Spain هَتكسب المونديال — مفيش حد قد Yamal دلوقتي»
+  - «أنا متابع Tuchel من سنين، وقَرار شَطب Foden ده غَلطة هَيندم عليها»
+  - «المنتخب اللي مَحَدش بَيتكلم عنه دلوقتي؟ Saudi. سَمعتوها مني الأول.»
+Hot take ideally sits in segment 2-4 (after the lead news, before the CTA close). The Pharaoh is a creator, not a wire service.
+
+== WORLD CUP COUNTDOWN + LEAD-UP NARRATIVE ==
+World Cup 2026 kicks off June 11, 2026 in Mexico City. The user message will tell you today's date and exact days remaining. ANCHOR every roundup to the countdown — the clock IS the story right now:
+  - «17 يوم بَس على المونديال — كل خبر دلوقتي بَيتعد»
+  - «أسبوعين على افتتاح المونديال، والقايمات لِسه بَتتلَخبَط»
+  - «كل ساعة بَيقرب المونديال، وأنا قاعد بَجمَعلكوا اللي بَيحصل»
+- In the WEEK BEFORE kickoff (June 4-10): countdown is paramount. Every roundup opens with the day count.
+- In the FIRST WEEK of the tournament: lead with results + group standings + who advanced.
+- In the GROUP STAGE: organize by group ("النهارده كان يوم الجروب C — هَوَجَعك بنتيجة كل ماتش").
+- In the KNOCKOUTS: bracket logic + "اللي بَره" / "اللي لِسه" framing.
+- During the FINAL WEEK: "أنا قاعد أتفرّج معاكوا" tone — the Pharaoh is now ALONGSIDE the audience, not ahead of them.
+The countdown is also a viewer-retention loop: when the viewer knows "هَيرجع بعد 6 ساعات"، they come back. Make the cadence visible in every roundup.
+
+== ANTI-DUPLICATION ==
+The source pool you receive has been pre-filtered to exclude sources already cited in any prior roundup. So you will not see duplicate raw sources. But also:
+  - Two sources covering the SAME event → MERGE into one segment carrying both angles, never split.
+  - Within a single roundup, every segment's STORY ANGLE must be distinct (a "Salah leaves Liverpool" story plus a "Salah-shaped hole in Liverpool's attack" story = one segment, not two).
+  - Caption_ar on each segment must be unique across the roundup — never two segments with similar captions.
+
 == THE VOICE (this is the product) ==
 The host is a fusion of three Egyptian voice icons — pick the dominant pattern per segment based on the story type, but it is the same person across them all:
   1. BASSEM YOUSSEF (الترسو) — sarcastic observational, mock-serious flat delivery for absurdity. Catchphrases: «حلو الكلام ده» (after something stupid), «لأ مش معقول», «تعالى نفهم سوا». Use for absurd defeats, predictable mistakes, "I told you so" moments.
@@ -308,28 +353,87 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ ok: true, skipped: "already_done", bucket });
     }
 
-    // ---- 5. pull the last 24h of sources -------------------
-    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { data: sources, error: srcErr } = await supabase
+    // ---- 5a. pull the recent source window ------------------
+    // 8h window: the cron fires every 6h, so 8h covers any tick that
+    // missed by up to 2h while still keeping stories tight to "what
+    // just happened" — avoids dragging yesterday's news into every
+    // roundup.
+    const eightHoursAgo = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
+    const { data: rawSources, error: srcErr } = await supabase
       .from("raw_sources")
       .select("id, source_handle, author, content, media_urls, url, verified")
       .eq("owner_id", OWNER_ID)
-      .gte("created_at", dayAgo)
+      .gte("created_at", eightHoursAgo)
       .order("created_at", { ascending: false })
       .limit(200);
     if (srcErr) throw new Error(`raw_sources query: ${srcErr.message}`);
-    if (!sources || sources.length === 0) {
+    if (!rawSources || rawSources.length === 0) {
       return jsonResponse({ ok: true, skipped: "no_sources", bucket });
+    }
+
+    // ---- 5b. de-duplicate against recent roundups -----------
+    // Every content_idea records its source_ids in brief.source_ids.
+    // Pull every brief from the last 48h and collect a set of "burnt"
+    // ids; any source already used by a roundup is excluded here so
+    // we never write the same story twice. 48h is wide enough to
+    // catch the prior 4 roundups even if scheduling drifts.
+    const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    const { data: priorIdeas, error: priorErr } = await supabase
+      .from("content_ideas")
+      .select("brief")
+      .eq("owner_id", OWNER_ID)
+      .gte("created_at", twoDaysAgo);
+    if (priorErr) throw new Error(`prior ideas query: ${priorErr.message}`);
+
+    const usedIds = new Set<string>();
+    for (const row of priorIdeas ?? []) {
+      const brief = row.brief as { source_ids?: unknown } | null;
+      const ids = Array.isArray(brief?.source_ids) ? brief!.source_ids : [];
+      for (const id of ids) if (typeof id === "string") usedIds.add(id);
+    }
+
+    const sources = rawSources.filter(
+      (s: { id: string }) => !usedIds.has(s.id),
+    );
+    if (sources.length < 3) {
+      return jsonResponse({
+        ok: true,
+        skipped: "not_enough_fresh_sources",
+        bucket,
+        total_in_window: rawSources.length,
+        already_used: rawSources.length - sources.length,
+        fresh_remaining: sources.length,
+      });
     }
     const validIds = new Set(sources.map((s: { id: string }) => s.id));
 
     // ---- 6. call the Claude API ----------------------------
+    // Compute today (Cairo) + days-to-WC so the model can anchor the
+    // countdown narrative concretely.
+    const todayCairo = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Africa/Cairo",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+    const WC_KICKOFF_ISO = "2026-06-11";
+    const daysToKickoff = Math.max(
+      0,
+      Math.round(
+        (new Date(WC_KICKOFF_ISO).getTime() - new Date(todayCairo).getTime()) /
+          (24 * 60 * 60 * 1000),
+      ),
+    );
+
     const userMessage =
+      `Today (Cairo): ${todayCairo}.\n` +
+      `World Cup 2026 kickoff: ${WC_KICKOFF_ISO} (Mexico City).\n` +
+      `Days remaining: ${daysToKickoff}.\n\n` +
       `Time bucket: ${bucket}` +
       (bucket === "18-24" ? " (primetime — lead with the single biggest story of the day)." : ".") +
-      `\n\nThe last 24 hours of scraped football news (JSON). Reference each item's "id" in brief.source_ids:\n\n` +
+      `\n\nThe scraped football news in the LAST 8 HOURS, pre-filtered to exclude anything already covered in a recent roundup (JSON). Reference each item's "id" in brief.source_ids:\n\n` +
       JSON.stringify(sources) +
-      `\n\nProduce ONE roundup video for this window now. Return only the structured JSON.`;
+      `\n\nProduce ONE roundup video for this window now. Anchor it to the ${daysToKickoff}-day countdown. Return only the structured JSON.`;
 
     const apiResp = await fetch(ANTHROPIC_URL, {
       method: "POST",

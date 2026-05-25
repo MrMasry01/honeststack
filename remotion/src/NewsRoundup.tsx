@@ -34,6 +34,12 @@ interface SceneProps {
   durationInFrames: number;
   /** Absolute frame (in the full composition) at which this scene starts. */
   segmentStartFrame: number;
+  /** Days remaining until WC2026 kickoff. Drives the countdown chip. */
+  daysToWc?: number;
+  /** 1-indexed segment position (for the dot stack). */
+  segmentIndex: number;
+  /** Total number of segments (for the dot stack). */
+  segmentCount: number;
 }
 
 const Scene: React.FC<SceneProps> = ({
@@ -42,6 +48,9 @@ const Scene: React.FC<SceneProps> = ({
   voiceUrl,
   durationInFrames,
   segmentStartFrame,
+  daysToWc,
+  segmentIndex,
+  segmentCount,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -101,18 +110,77 @@ const Scene: React.FC<SceneProps> = ({
         entranceProgress={entranceProgress}
       />
 
-      {/* 4. Segment number indicator (top-left) */}
-      <SegmentIndicator brand={brand} />
+      {/* 4. Countdown chip (top-right) — replaces the lone pulse dot.
+             When the WC has started (daysToWc === 0 or undefined), falls
+             back to a small accent dot so we don't show "0 days" oddly. */}
+      <CountdownChip brand={brand} daysToWc={daysToWc} />
+
+      {/* 5. Segment position dots (top-right, below countdown) — a small
+             progress indicator so viewers feel the roundup advancing. */}
+      <SegmentDots
+        brand={brand}
+        index={segmentIndex}
+        total={segmentCount}
+      />
     </AbsoluteFill>
   );
 };
 
-// Small translucent segment-number dot in the top-right corner
-const SegmentIndicator: React.FC<{ brand: NewsRoundupProps["brand"] }> = ({
-  brand,
-}) => {
+// Countdown chip — "١٧ يوم على المونديال". Top-right corner. Hides when
+// the tournament has started.
+const CountdownChip: React.FC<{
+  brand: NewsRoundupProps["brand"];
+  daysToWc?: number;
+}> = ({ brand, daysToWc }) => {
   const frame = useCurrentFrame();
-  const pulseScale = 1 + 0.06 * Math.abs(Math.sin((frame / 15) * Math.PI));
+  const opacity = Math.min(frame / 15, 0.95);
+
+  if (!daysToWc || daysToWc <= 0) {
+    // Tournament has started — show "LIVE" marker instead
+    return (
+      <div
+        style={{
+          position: "absolute",
+          top: 60,
+          right: 40,
+          opacity,
+          background: "rgba(0,0,0,0.55)",
+          border: `1.5px solid ${brand.accent}`,
+          borderRadius: 999,
+          padding: "8px 14px",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          backdropFilter: "blur(6px)",
+        }}
+      >
+        <div
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            background: "#FF3B30",
+            boxShadow: "0 0 8px #FF3B30",
+          }}
+        />
+        <span
+          style={{
+            fontFamily: "Cairo, sans-serif",
+            fontWeight: 800,
+            fontSize: 20,
+            color: "#FFFFFF",
+            letterSpacing: 1.2,
+          }}
+        >
+          LIVE
+        </span>
+      </div>
+    );
+  }
+
+  // Convert digits to Arabic numerals for visual cohesion with the script
+  const toArabicDigits = (n: number) =>
+    String(n).replace(/[0-9]/g, (d) => "٠١٢٣٤٥٦٧٨٩"[Number(d)]);
 
   return (
     <div
@@ -120,15 +188,84 @@ const SegmentIndicator: React.FC<{ brand: NewsRoundupProps["brand"] }> = ({
         position: "absolute",
         top: 60,
         right: 40,
-        width: 14,
-        height: 14,
-        borderRadius: "50%",
-        background: brand.accent,
-        transform: `scale(${pulseScale})`,
-        boxShadow: `0 0 12px ${brand.accent}`,
-        opacity: 0.85,
+        opacity,
+        background: "rgba(0,0,0,0.55)",
+        border: `1.5px solid ${brand.accent}`,
+        borderRadius: 999,
+        padding: "8px 16px",
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        backdropFilter: "blur(6px)",
+        boxShadow: `0 0 16px rgba(0,0,0,0.5)`,
       }}
-    />
+    >
+      <span
+        style={{
+          fontFamily: "Cairo, sans-serif",
+          fontWeight: 900,
+          fontSize: 26,
+          color: brand.accent,
+          lineHeight: 1,
+        }}
+      >
+        {toArabicDigits(daysToWc)}
+      </span>
+      <span
+        style={{
+          fontFamily: "Cairo, sans-serif",
+          fontWeight: 700,
+          fontSize: 16,
+          color: "#FFFFFF",
+          lineHeight: 1,
+          direction: "rtl",
+        }}
+      >
+        يوم على المونديال
+      </span>
+    </div>
+  );
+};
+
+// A tiny dot stack under the countdown showing segment position.
+// e.g. ●●○○○○○ for segment 2 of 7.
+const SegmentDots: React.FC<{
+  brand: NewsRoundupProps["brand"];
+  index: number; // 1-indexed
+  total: number;
+}> = ({ brand, index, total }) => {
+  const frame = useCurrentFrame();
+  const opacity = Math.min(frame / 20, 0.7);
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 112,
+        right: 40,
+        opacity,
+        display: "flex",
+        gap: 6,
+        alignItems: "center",
+      }}
+    >
+      {Array.from({ length: total }).map((_, i) => {
+        const active = i < index;
+        return (
+          <div
+            key={i}
+            style={{
+              width: active ? 8 : 6,
+              height: active ? 8 : 6,
+              borderRadius: "50%",
+              background: active ? brand.accent : "rgba(255,255,255,0.45)",
+              boxShadow: active ? `0 0 6px ${brand.accent}` : "none",
+              transition: "all 200ms",
+            }}
+          />
+        );
+      })}
+    </div>
   );
 };
 
@@ -141,6 +278,7 @@ export const NewsRoundup: React.FC<NewsRoundupProps> = ({
   brand,
   intro_text,
   outro_handle,
+  days_to_wc,
 }) => {
   const { fps } = useVideoConfig();
 
@@ -189,6 +327,9 @@ export const NewsRoundup: React.FC<NewsRoundupProps> = ({
               voiceUrl={host_voice_url}
               durationInFrames={durationInFrames}
               segmentStartFrame={from}
+              daysToWc={days_to_wc}
+              segmentIndex={i + 1}
+              segmentCount={segments.length}
             />
           </Sequence>
         );

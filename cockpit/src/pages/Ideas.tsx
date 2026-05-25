@@ -440,11 +440,8 @@ function IdeaCard({ idea, onChanged }: { idea: Idea; onChanged: () => void }) {
                 AR
               </span>
             )}
-            {idea.time_bucket && (
-              <span style={{ fontSize: 11, color: C.slate }}>
-                {idea.time_bucket === '18-24' ? '18-24 · primetime' : idea.time_bucket}
-              </span>
-            )}
+            {/* time_bucket is internal editorial targeting metadata (not on
+                video). Hidden from cockpit per chief-editor cleanup. */}
             <span style={{ fontSize: 11, color: C.slate, marginLeft: 'auto' }}>
               {formatDistanceToNow(new Date(idea.created_at), { addSuffix: true })}
             </span>

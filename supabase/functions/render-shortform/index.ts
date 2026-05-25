@@ -1075,6 +1075,19 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
     },
     intro_text: hook,
     outro_handle: OUTRO_HANDLE,
+    // Days until WC2026 kickoff (June 11, 2026 Mexico City). The renderer
+    // shows a countdown chip top-right on every scene. Once the tournament
+    // starts (daysToWc === 0), the chip switches to a LIVE marker.
+    days_to_wc: (() => {
+      const today = new Date();
+      const wcKickoff = new Date("2026-06-11T00:00:00Z");
+      return Math.max(
+        0,
+        Math.round(
+          (wcKickoff.getTime() - today.getTime()) / (24 * 60 * 60 * 1000),
+        ),
+      );
+    })(),
   };
 
   // ---- 7. trigger the Remotion render --------------------
