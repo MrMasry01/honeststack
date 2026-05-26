@@ -30,6 +30,12 @@ export const PharaohPoseEnum = z.enum([
   "celebrating",
 ]);
 
+// Scene composition hints. Editorial brain may set these per segment to drive
+// avatar size, anchor side, and ambient color tint. All optional — the
+// renderer degrades gracefully to centered / mid / brand.primary defaults.
+export const SceneDensityEnum = z.enum(["close", "mid", "wide"]);
+export const SubjectAnchorEnum = z.enum(["left", "center", "right"]);
+
 export const SegmentSchema = z.object({
   text_ar: z
     .string()
@@ -62,6 +68,26 @@ export const SegmentSchema = z.object({
     "entry animation — peek-left/peek-right enter from edges, walk-in-left " +
     "walks across, point-up-right points at the photo, etc."
   ),
+  scene_density: SceneDensityEnum.optional().describe(
+    "How tight the source visual is framed. 'close' = extreme face close-up " +
+    "(Pharaoh enlarges so it doesn't get dwarfed); 'mid' = standard portrait/" +
+    "action (default); 'wide' = wide training/stadium shot (Pharaoh shrinks " +
+    "slightly so the scene reads). Optional — derived heuristically when absent."
+  ),
+  subject_anchor: SubjectAnchorEnum.optional().describe(
+    "Where the photo's subject sits horizontally. Pharaoh auto-anchors to the " +
+    "OPPOSITE side and the contained subject shifts slightly toward this side " +
+    "so the two visual weights balance instead of colliding. Default 'center'."
+  ),
+  ambient_hex: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .optional()
+    .describe(
+      "Dominant scene color in #RRGGBB. Tints the bottom-band ambient wash " +
+      "and Pharaoh stage-light + contact shadow so the avatar reads as IN " +
+      "the scene's lighting. Falls back to brand.primary if absent."
+    ),
 });
 
 export const BrandSchema = z.object({
@@ -105,3 +131,5 @@ export type KenBurns = z.infer<typeof KenBurnsSchema>;
 export type Segment = z.infer<typeof SegmentSchema>;
 export type Brand = z.infer<typeof BrandSchema>;
 export type NewsRoundupProps = z.infer<typeof NewsRoundupSchema>;
+export type SceneDensity = z.infer<typeof SceneDensityEnum>;
+export type SubjectAnchor = z.infer<typeof SubjectAnchorEnum>;

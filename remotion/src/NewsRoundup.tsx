@@ -25,6 +25,116 @@ function msToFrames(ms: number, fps: number): number {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Shared scene-composition contract
+// ─────────────────────────────────────────────────────────────────────────────
+// These three derived values are computed in <Scene> and forwarded to
+// ParallaxBackdrop, the stage-light layer, CaptionStrip, and Host so every
+// piece of the frame composes from the same spatial model.
+//
+//  • sceneDensity   — how tight the source visual is framed. Affects how much
+//                     headroom the contained subject needs and how strong the
+//                     ambient blur should breathe.
+//  • subjectAnchor  — where the photo subject sits. The Pharaoh sits on the
+//                     OPPOSITE side ("opposite-side rule") and the stage-light
+//                     spotlight is anchored under that same opposite side.
+//  • sceneAmbientHex — dominant scene color. Used to tint the bottom-band
+//                     gradient and the spotlight so the mascot looks lit by
+//                     the actual scene rather than dropped onto a black mask.
+// ─────────────────────────────────────────────────────────────────────────────
+export type SceneDensity = "close" | "mid" | "wide";
+export type SubjectAnchor = "left" | "center" | "right";
+
+/** Heuristic — treat URLs that end in a known video extension as video. */
+function isVideoUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  return /\.(mp4|mov|webm|m4v)(\?|#|$)/i.test(url);
+}
+
+/**
+ * Derive a sceneDensity from segment data without requiring a schema change.
+ * Heuristic rules (documented; safe to override once schema carries the field):
+ *   - Any video backdrop → 'mid' (motion already does the framing work)
+ *   - kenBurns.to >= 1.18 → 'close' (heavy zoom implies the source is tight)
+ *   - kenBurns.to <= 1.04 → 'wide'  (no zoom → assume scene is wide/loose)
+ *   - otherwise → 'mid'
+ */
+function deriveSceneDensity(
+  segment: NewsRoundupProps["segments"][number],
+): SceneDensity {
+  if (isVideoUrl(segment.visual_url)) return "mid";
+  const zoomTo = segment.ken_burns?.to;
+  if (typeof zoomTo === "number") {
+    if (zoomTo >= 1.18) return "close";
+    if (zoomTo <= 1.04) return "wide";
+  }
+  return "mid";
+}
+
+/**
+ * Validate a hex color string. We refuse anything that isn't a clean #RRGGBB
+ * because we splice it directly into CSS gradient stops with an alpha suffix
+ * (`#RRGGBB${alphaHex}`) — a malformed value would silently break the wash.
+ */
+function isValidHex(hex: string | undefined): hex is string {
+  return Boolean(hex && /^#[0-9a-fA-F]{6}$/.test(hex));
+}
+
+/**
+ * Append a two-char alpha byte to a 6-char hex (e.g. '#D4AF37' + 0.78 → '#D4AF37C7').
+ */
+function hexWithAlpha(hex: string, alpha: number): string {
+  const a = Math.max(0, Math.min(1, alpha));
+  const byte = Math.round(a * 255)
+    .toString(16)
+    .padStart(2, "0")
+    .toUpperCase();
+  return `${hex}${byte}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// StageLight: a soft radial wash anchored under the Pharaoh's position.
+// Tinted with sceneAmbientHex blended toward brand.accent — sells the idea
+// that the mascot is standing in light spilled from the scene above.
+// ─────────────────────────────────────────────────────────────────────────────
+const StageLight: React.FC<{
+  brand: NewsRoundupProps["brand"];
+  ambientHex: string;
+  /** Where Pharaoh is positioned (opposite of subjectAnchor by default). */
+  pharaohSide: SubjectAnchor;
+}> = ({ brand, ambientHex, pharaohSide }) => {
+  // X anchor of the spotlight, as % of frame width.
+  const cx =
+    pharaohSide === "left" ? 28 : pharaohSide === "right" ? 72 : 50;
+  // Y anchor — Pharaoh stands roughly in the lower-mid band.
+  const cy = 80;
+
+  // Blend ambient toward accent for a slightly warmer pool of light.
+  const tintHex = isValidHex(ambientHex) ? ambientHex : brand.accent;
+  const inner = hexWithAlpha(tintHex, 0.32);
+  const mid = hexWithAlpha(tintHex, 0.14);
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        pointerEvents: "none",
+        // Two radial stops: a tight tinted core that hugs the avatar, and a
+        // wider soft halo that fades to transparent before reaching the
+        // photo subject above. Keeps the effect localised.
+        background: [
+          `radial-gradient(circle at ${cx}% ${cy}%, ${inner} 0%, ${mid} 18%, transparent 38%)`,
+          `radial-gradient(circle at ${cx}% ${cy}%, ${hexWithAlpha(brand.accent, 0.10)} 0%, transparent 22%)`,
+        ].join(", "),
+        // mix-blend-mode: screen would over-blow on bright photos; normal
+        // composite at modest alpha looks closer to real bounce light.
+        mixBlendMode: "normal",
+      }}
+    />
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Scene: a single news segment
 // ─────────────────────────────────────────────────────────────────────────────
 interface SceneProps {
@@ -70,6 +180,39 @@ const Scene: React.FC<SceneProps> = ({
   const sceneAudioUrl = segment.audio_url || voiceUrl;
   const hasPerSegmentAudio = Boolean(segment.audio_url);
 
+  // ── Shared scene-composition contract ────────────────────────────────────
+  // For v1 these are derived from existing schema fields. Once schema carries
+  // explicit density / subject_anchor / ambient_hex on the segment, switch to
+  // `segment.subject_anchor ?? 'center'` etc. — the rest of the pipeline below
+  // is already wired to consume the explicit values.
+  const sceneDensity: SceneDensity = deriveSceneDensity(segment);
+
+  // No schema field yet → default centered. Documented in integration notes.
+  const subjectAnchor: SubjectAnchor =
+    (segment as unknown as { subject_anchor?: SubjectAnchor }).subject_anchor ??
+    "center";
+
+  // Placeholder dominant color. Ideally a Gemini I2I or vision pass extracts
+  // the dominant hex from segment.visual_url upstream; until then fall back
+  // to brand.primary so the gradient still feels on-brand.
+  const sceneAmbientHex: string = isValidHex(
+    (segment as unknown as { ambient_hex?: string }).ambient_hex,
+  )
+    ? ((segment as unknown as { ambient_hex: string }).ambient_hex)
+    : isValidHex(brand.primary)
+      ? brand.primary
+      : "#0A0A0A";
+
+  // Pharaoh sits on the OPPOSITE side from the photo subject (opposite-side
+  // rule). When subject is centered, Pharaoh defaults to right (matches the
+  // current Host implementation's resting pose).
+  const pharaohSide: SubjectAnchor =
+    subjectAnchor === "left"
+      ? "right"
+      : subjectAnchor === "right"
+        ? "left"
+        : "right";
+
   return (
     <AbsoluteFill>
       {/* 0. Per-segment narration audio. When the upstream pipeline split
@@ -82,13 +225,28 @@ const Scene: React.FC<SceneProps> = ({
       {/* 1. Parallax backdrop — the event visual. The fixed Pharaoh mascot is
              small and lives in a bottom band, so the event visual is always
              biased to the UPPER portion (it occupies the upper ~75% of the
-             frame) and stays fully visible. */}
+             frame) and stays fully visible. The bottom vignette is now a
+             tinted ambient wash (NOT a black letterbox), so the mascot band
+             reads as the same scene rather than a separate overlay. */}
       <ParallaxBackdrop
         visualUrl={segment.visual_url}
         durationInFrames={durationInFrames}
         kenBurns={segment.ken_burns}
         brand={brand}
         upperBias
+        subjectAnchor={subjectAnchor}
+        sceneAmbientHex={sceneAmbientHex}
+        sceneDensity={sceneDensity}
+      />
+
+      {/* 1b. Stage-light wash — a soft radial pool of tinted light anchored
+              under the Pharaoh's standing position. Layered BETWEEN backdrop
+              and Host so the mascot reads as "lit by the scene" rather than
+              floating on a black bar. Tinted with sceneAmbientHex. */}
+      <StageLight
+        brand={brand}
+        ambientHex={sceneAmbientHex}
+        pharaohSide={pharaohSide}
       />
 
       {/* 2. Host — the fixed Egyptian Pharaoh mascot. Small, glides
@@ -103,13 +261,23 @@ const Scene: React.FC<SceneProps> = ({
         audioFrameOffset={hasPerSegmentAudio ? 0 : segmentStartFrame}
         pharaohPose={segment.pharaoh_pose}
         sceneDurationFrames={durationInFrames}
+        // Shared scene-composition contract — the avatar agent reads these
+        // to pick the Pharaoh's horizontal anchor (opposite-side rule) and
+        // optionally tint its shadow / accent to match scene ambient.
+        sceneDensity={sceneDensity}
+        subjectAnchor={subjectAnchor}
+        sceneAmbientHex={sceneAmbientHex}
       />
 
-      {/* 3. RTL Arabic caption strip (bottom — stays above the character) */}
+      {/* 3. RTL Arabic caption strip (bottom — stays above the character).
+             Lower-third lozenge, NOT a full-width opaque band: anchored on
+             the same side as the photo subject so it doesn't crowd Pharaoh. */}
       <CaptionStrip
         textAr={segment.text_ar}
         brand={brand}
         entranceProgress={entranceProgress}
+        subjectAnchor={subjectAnchor}
+        sceneAmbientHex={sceneAmbientHex}
       />
 
       {/* 4. Countdown chip (top-right) — replaces the lone pulse dot.

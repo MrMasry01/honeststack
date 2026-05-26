@@ -36,7 +36,103 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 // ---- constants ---------------------------------------------
 const OWNER_ID = "e7564e43-6b02-4c40-9ecf-1c65fffafe9a";
 const STORAGE_BUCKET = "assets";
-const ELEVENLABS_MODEL = "eleven_multilingual_v2";
+// ── ElevenLabs model selection ────────────────────────────────────────────
+// We switched from eleven_multilingual_v2 (Aug-2023) to eleven_v3 in May 2026
+// after observing two recurring issues with v2 on Egyptian-Arabic narration:
+//   1. Latin digits inside an Arabic sentence ("16 يوم") triggered v2's
+//      language guesser to read the digits in English phonemes, breaking
+//      the line. Even after we added a digit→Arabic-word preprocessor
+//      (numberToEgyptianWords below), v2 still pronounced certain function
+//      words in MSA register because its Arabic training was MSA-heavy.
+//   2. v3 (alpha) handles dialect substantially better, and supports inline
+//      audio tags like "[Egyptian Arabic, sports commentator]" that anchor
+//      the entire utterance to a specific register — exactly what we need.
+// Cloned voices (IES4nrmZdUBHByLBde0P) work cross-model; no re-record.
+const ELEVENLABS_MODEL = "eleven_v3";
+
+// Inline audio-tag prefix prepended to every segment's text. v3 reads the
+// bracketed register/style as a directive (not spoken aloud) and conditions
+// the entire utterance on it. Critical for keeping the host in Egyptian
+// colloquial when the script contains words that read MSA in isolation.
+const ELEVENLABS_REGISTER_PREFIX =
+  "[Egyptian Arabic, sports commentator, conversational, energetic] ";
+
+// ── Egyptian Arabic number-to-words preprocessor ──────────────────────────
+// ElevenLabs (any model) struggles with digit sequences in Arabic text. The
+// fix is to spell numbers out as Egyptian-colloquial words BEFORE TTS. This
+// covers 0–999,999 which is more than enough for our scripts (day counts,
+// scorelines, years, ranks). Uses Egyptian dialect forms — "اتنين/تلاتة/
+// ستاشر" — not MSA — "اثنان/ثلاثة/ستة عشر".
+const EG_ONES = [
+  "صفر", "واحد", "اتنين", "تلاتة", "أربعة",
+  "خمسة", "ستة", "سبعة", "تمانية", "تسعة",
+];
+const EG_TEENS = [
+  "عشرة", "حداشر", "اتناشر", "تلاتاشر", "اربعتاشر",
+  "خمستاشر", "ستاشر", "سبعتاشر", "تمنتاشر", "تسعتاشر",
+];
+const EG_TENS = [
+  "", "", "عشرين", "تلاتين", "اربعين",
+  "خمسين", "ستين", "سبعين", "تمانين", "تسعين",
+];
+
+function numberToEgyptianWords(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return String(n);
+  if (n < 10) return EG_ONES[n];
+  if (n < 20) return EG_TEENS[n - 10];
+  if (n < 100) {
+    const tens = Math.floor(n / 10);
+    const ones = n % 10;
+    if (ones === 0) return EG_TENS[tens];
+    return `${EG_ONES[ones]} و${EG_TENS[tens]}`;
+  }
+  if (n === 100) return "مية";
+  if (n < 1000) {
+    const hundreds = Math.floor(n / 100);
+    const rest = n % 100;
+    let hPart: string;
+    if (hundreds === 1) hPart = "مية";
+    else if (hundreds === 2) hPart = "ميتين";
+    else if (hundreds === 3) hPart = "تلتمية";
+    else if (hundreds === 4) hPart = "ربعمية";
+    else if (hundreds === 5) hPart = "خمسمية";
+    else if (hundreds === 6) hPart = "ستمية";
+    else if (hundreds === 7) hPart = "سبعمية";
+    else if (hundreds === 8) hPart = "تمنمية";
+    else hPart = "تسعمية";
+    if (rest === 0) return hPart;
+    return `${hPart} و${numberToEgyptianWords(rest)}`;
+  }
+  if (n === 1000) return "ألف";
+  if (n === 2000) return "ألفين";
+  if (n < 1_000_000) {
+    const thousands = Math.floor(n / 1000);
+    const rest = n % 1000;
+    let kPart: string;
+    if (thousands === 1) kPart = "ألف";
+    else if (thousands === 2) kPart = "ألفين";
+    else if (thousands < 11) kPart = `${EG_ONES[thousands]} آلاف`;
+    else kPart = `${numberToEgyptianWords(thousands)} ألف`;
+    if (rest === 0) return kPart;
+    return `${kPart} و${numberToEgyptianWords(rest)}`;
+  }
+  return String(n);
+}
+
+// Replace every digit run (both Western 0-9 and Arabic-Indic ٠-٩) inside the
+// script with its Egyptian-spelled word form. We deliberately do NOT touch
+// punctuation or anything else — just numbers.
+const ARABIC_INDIC_DIGITS = "٠١٢٣٤٥٦٧٨٩";
+function convertNumbersToEgyptian(text: string): string {
+  return text.replace(/[\d٠-٩]+/g, (match) => {
+    const normalized = match.replace(/[٠-٩]/g, (d) =>
+      String(ARABIC_INDIC_DIGITS.indexOf(d))
+    );
+    const n = parseInt(normalized, 10);
+    if (!Number.isFinite(n)) return match;
+    return numberToEgyptianWords(n);
+  });
+}
 // Primary image model, plus a stable fallback used when the preview model
 // is rate-limited (preview models carry very tight free-tier quotas).
 const GEMINI_MODELS = ["gemini-3.1-flash-image-preview", "gemini-2.5-flash-image"];
@@ -189,20 +285,27 @@ async function generateNarration(
         "Accept": "audio/mpeg",
       },
       body: JSON.stringify({
-        text,
+        // Two pre-TTS passes on the script:
+        //   1. convertNumbersToEgyptian — spells digits as Egyptian words so
+        //      v3 doesn't language-switch on "16 يوم" → "sixteen يوم".
+        //   2. ELEVENLABS_REGISTER_PREFIX — anchors the entire utterance in
+        //      Egyptian colloquial register via v3's inline audio-tag system,
+        //      preventing MSA drift on common function words.
+        text: `${ELEVENLABS_REGISTER_PREFIX}${convertNumbersToEgyptian(text)}`,
         model_id: ELEVENLABS_MODEL,
         voice_settings: {
-          // Tuned for Egyptian sports creator voice:
-          //   stability 0.40 — slight drop from 0.45 lets the host get more
-          //     expressive on Adib crescendos and Bassem dry-sarcasm flat-lines
-          //     without losing the voice identity.
-          //   similarity_boost 0.75 — keeps the custom voice clone's character.
-          //   style 0.35 — adds performance energy (the "talking to camera"
-          //     intonation). 0 sounds flat; >0.6 starts to over-act.
+          // Tuned for eleven_v3 + Egyptian sports creator voice:
+          //   stability 0.32 — lower than v2's 0.40 lets the clone's natural
+          //     Egyptian inflection through. v3 is more stable at low values,
+          //     so we can lean further without losing voice identity.
+          //   similarity_boost 0.75 — unchanged; preserves clone character.
+          //   style 0.48 — up from 0.35. v3 reads "style" as how strongly to
+          //     bias toward the clone's idiosyncratic speech patterns (vs a
+          //     generic narrator interpretation). For dialect this matters.
           //   use_speaker_boost — sharpens against the reference voice.
-          stability: 0.40,
+          stability: 0.32,
           similarity_boost: 0.75,
-          style: 0.35,
+          style: 0.48,
           use_speaker_boost: true,
         },
       }),

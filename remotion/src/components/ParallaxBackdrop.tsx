@@ -13,6 +13,24 @@ function isVideoUrl(url: string): boolean {
   return /\.(mp4|mov|webm|m4v)(\?|#|$)/i.test(url);
 }
 
+/** Validate #RRGGBB hex (kept local — same shape as the helper in NewsRoundup). */
+function isValidHex(hex: string | undefined): hex is string {
+  return Boolean(hex && /^#[0-9a-fA-F]{6}$/.test(hex));
+}
+
+/** Append a two-char alpha byte to a 6-char hex string. */
+function hexWithAlpha(hex: string, alpha: number): string {
+  const a = Math.max(0, Math.min(1, alpha));
+  const byte = Math.round(a * 255)
+    .toString(16)
+    .padStart(2, "0")
+    .toUpperCase();
+  return `${hex}${byte}`;
+}
+
+type SceneDensity = "close" | "mid" | "wide";
+type SubjectAnchor = "left" | "center" | "right";
+
 interface ParallaxBackdropProps {
   visualUrl: string;
   durationInFrames: number;
@@ -26,6 +44,25 @@ interface ParallaxBackdropProps {
    * more aggressively so the mascot composites cleanly.
    */
   upperBias?: boolean;
+  /**
+   * Where the photo subject sits horizontally. Drives an anchor-aware
+   * counter-offset on the contained subject layer so the Pharaoh (which
+   * sits on the OPPOSITE side per the opposite-side rule) doesn't collide
+   * with the photo's visual weight.
+   */
+  subjectAnchor?: SubjectAnchor;
+  /**
+   * Dominant scene color (#RRGGBB). Used to tint the bottom-band ambient
+   * wash so the mascot reads as lit by the scene rather than dropped onto
+   * a black letterbox. Falls back to brand.primary when invalid/missing.
+   */
+  sceneAmbientHex?: string;
+  /**
+   * How tight the source is framed. Affects how much vertical headroom
+   * the contained-subject layer takes — close shots get a touch more
+   * room, wide shots get a touch less so the ambient wash can breathe.
+   */
+  sceneDensity?: SceneDensity;
 }
 
 /**
@@ -47,11 +84,14 @@ interface ParallaxBackdropProps {
  *
  * Layer 2 (CONTAINED SUBJECT): the actual photo with objectFit:contain.
  * The whole subject is preserved. Slight upward bias when a host mascot
- * occupies the bottom band. Static — no zoom — so the subject never feels
- * like it's growing into the frame edges.
+ * occupies the bottom band. Anchor-aware horizontal counter-offset shifts
+ * the subject OPPOSITE the Pharaoh side so the two visual weights balance.
  *
- * Layer 3 (vignette): top + bottom gradient stops the captions and host
- * from competing visually with bright photo edges.
+ * Layer 3 (ambient wash + caption-band shade): NOT a black vignette. The
+ * bottom band is tinted with sceneAmbientHex at falling alphas so it reads
+ * as ambient light spilling out of the scene, not a letterbox bar. A faint
+ * darker pad sits at the very bottom edge to preserve caption contrast
+ * without re-introducing the black-band feel.
  *
  * For VIDEO backdrops the blurred-ambient layer is omitted (compositor
  * cost is high for double-decoding a video, and motion is already there);
@@ -63,6 +103,9 @@ export const ParallaxBackdrop: React.FC<ParallaxBackdropProps> = ({
   kenBurns = { from: 1.0, to: 1.08 },
   brand,
   upperBias = false,
+  subjectAnchor = "center",
+  sceneAmbientHex,
+  sceneDensity = "mid",
 }) => {
   const frame = useCurrentFrame();
   const { width, height } = useVideoConfig();
@@ -83,11 +126,30 @@ export const ParallaxBackdrop: React.FC<ParallaxBackdropProps> = ({
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  // Subject itself gets a tiny pan to feel alive without losing focus.
-  const subjectOffsetX = interpolate(progress, [0, 1], [-6, 6], {
+
+  // Subject parallax: time-based drift (existing behaviour, unchanged amount).
+  const subjectParallaxX = interpolate(progress, [0, 1], [-6, 6], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
+
+  // ── Anchor-aware counter-offset ────────────────────────────────────────
+  // When the Pharaoh sits on one side of the frame, the photo subject in
+  // Layer 2 shifts the OPPOSITE direction by ~7% of frame width so the
+  // two visual weights balance instead of collide. Centered subjects get
+  // a 0px nudge.
+  //   subjectAnchor === 'left'  → Pharaoh on right → subject nudges left
+  //   subjectAnchor === 'right' → Pharaoh on left  → subject nudges right
+  // This is ADDED to subjectParallaxX so time-parallax still works.
+  const anchorShiftPct = 0.07;
+  const subjectAnchorX =
+    subjectAnchor === "left"
+      ? -Math.round(width * anchorShiftPct)
+      : subjectAnchor === "right"
+        ? Math.round(width * anchorShiftPct)
+        : 0;
+  const subjectOffsetX = subjectAnchorX + subjectParallaxX;
+
   const vignetteOffsetX = interpolate(progress, [0, 1], [-4, 4], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
@@ -95,12 +157,52 @@ export const ParallaxBackdrop: React.FC<ParallaxBackdropProps> = ({
 
   // Subject layout: contain it within the upper region when a mascot
   // occupies the bottom band, otherwise contain it across the full frame.
-  // 75% of frame height = subject area; 25% bottom reserved for mascot +
-  // caption strip.
-  const subjectMaxHeight = upperBias ? Math.round(height * 0.7) : height;
+  // sceneDensity nudges the band height — close shots need a hair more
+  // room so faces don't get clipped by the mascot zone; wide shots
+  // surrender a hair more space to the ambient wash.
+  const densityHeightFactor =
+    sceneDensity === "close" ? 0.74 : sceneDensity === "wide" ? 0.66 : 0.70;
+  const subjectMaxHeight = upperBias
+    ? Math.round(height * densityHeightFactor)
+    : height;
   const subjectTop = upperBias ? Math.round(height * 0.02) : 0;
 
   const isVideo = isVideoUrl(visualUrl);
+
+  // ── Resolve ambient tint for the bottom-band wash ──────────────────────
+  // Default to brand.primary when sceneAmbientHex is missing/invalid. The
+  // alpha-byte append below requires a clean #RRGGBB string.
+  const ambientHex: string = isValidHex(sceneAmbientHex)
+    ? sceneAmbientHex
+    : isValidHex(brand.primary)
+      ? brand.primary
+      : "#0A0A0A";
+
+  // Build the ambient wash. NOT a hard black bar — a multi-stop tinted
+  // gradient that pulls the dominant scene color down into the mascot
+  // band so it feels like spill light, not a letterbox.
+  //
+  // Stack of three gradients composited together (order: top → bottom):
+  //   • Soft top scrim — preserves SegmentDots / Countdown legibility.
+  //   • Tinted ambient wash — sceneAmbientHex at falling alphas across
+  //     the lower 58% of the frame. This is the key replacement for the
+  //     old rgba(0,0,0,0.85) hard-black bottom stop.
+  //   • Caption-base shade — a thin near-black pad only at the very
+  //     bottom edge (the caption sits on a glass panel of its own so
+  //     this is just an insurance layer for high-key photos).
+  const ambientWashLayers = upperBias
+    ? [
+        // Soft top scrim
+        "linear-gradient(to bottom, rgba(0,0,0,0.32) 0%, transparent 16%)",
+        // Tinted ambient wash — the core fix for the "black letterbox" feel
+        `linear-gradient(to top, ${hexWithAlpha(ambientHex, 0.78)} 0%, ${hexWithAlpha(ambientHex, 0.55)} 14%, ${hexWithAlpha(ambientHex, 0.28)} 32%, ${hexWithAlpha(ambientHex, 0.08)} 50%, transparent 60%)`,
+        // Caption-base contrast pad — narrow and soft
+        "linear-gradient(to top, rgba(0,0,0,0.28) 0%, transparent 12%)",
+      ]
+    : [
+        "linear-gradient(to bottom, rgba(0,0,0,0.40) 0%, transparent 25%)",
+        "linear-gradient(to top, rgba(0,0,0,0.50) 0%, transparent 35%)",
+      ];
 
   return (
     <div
@@ -154,7 +256,10 @@ export const ParallaxBackdrop: React.FC<ParallaxBackdropProps> = ({
             />
           </div>
 
-          {/* ── Layer 2: CONTAINED SUBJECT — the actual photo, whole ── */}
+          {/* ── Layer 2: CONTAINED SUBJECT — the actual photo, whole.
+              transform now stacks anchor-shift (~7% width counter to the
+              Pharaoh side) on top of the time-based parallax drift, so
+              the photo subject visually balances the mascot side. */}
           <div
             style={{
               position: "absolute",
@@ -189,6 +294,8 @@ export const ParallaxBackdrop: React.FC<ParallaxBackdropProps> = ({
         // Video case: keep objectFit:cover with the lighter parallax pan
         // and the original Ken Burns scale (video is already motion-rich;
         // double-rendering for ambient blur is too costly).
+        // Anchor counter-shift applied via objectPosition X for video
+        // since we can't translate the inner element without revealing edges.
         <div
           style={{
             position: "absolute",
@@ -211,30 +318,30 @@ export const ParallaxBackdrop: React.FC<ParallaxBackdropProps> = ({
               width: "100%",
               height: "100%",
               objectFit: "cover",
-              objectPosition: upperBias ? "center 22%" : "center",
+              // Anchor: shift focal point opposite to the Pharaoh side.
+              // 50% = centered; <50% pulls subject left, >50% pulls right.
+              objectPosition: `${
+                subjectAnchor === "left"
+                  ? "35%"
+                  : subjectAnchor === "right"
+                    ? "65%"
+                    : "50%"
+              } ${upperBias ? "22%" : "50%"}`,
             }}
           />
         </div>
       )}
 
-      {/* ── Layer 3: vignette overlay ──
-          Lighter than before because the blurred ambient fill is already
-          darkened — over-vignetting now muddies the subject. */}
+      {/* ── Layer 3: scene-integrated ambient wash ──
+          Replaces the old black-letterbox vignette. Tinted with the
+          dominant scene color so the mascot band reads as scene light
+          spilling down rather than a hard mask. */}
       <div
         style={{
           position: "absolute",
           inset: 0,
           transform: `translateX(${vignetteOffsetX}px)`,
-          background: (upperBias
-            ? [
-                "linear-gradient(to bottom, rgba(0,0,0,0.35) 0%, transparent 18%)",
-                "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.45) 32%, transparent 55%)",
-              ]
-            : [
-                "linear-gradient(to bottom, rgba(0,0,0,0.40) 0%, transparent 25%)",
-                "linear-gradient(to top, rgba(0,0,0,0.70) 0%, transparent 40%)",
-              ]
-          ).join(", "),
+          background: ambientWashLayers.join(", "),
           pointerEvents: "none",
         }}
       />
