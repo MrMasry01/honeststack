@@ -107,6 +107,9 @@ export default function Overview() {
         </p>
       </div>
 
+      {/* Next pipeline run — when fresh ideas/renders/posts will appear */}
+      <NextRunCard />
+
       {/* Health indicators */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <HealthChip
@@ -216,6 +219,206 @@ export default function Overview() {
           </div>
         </Card>
       </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NextRunCard — when fresh content will appear next.
+//
+// The pipeline runs as a single 6-hour beat:
+//   • Ingest fires at minute 0 of 05/11/17/23 UTC (Twitter + RSS)
+//   • Editorial brief fires at minute 30 of the same hours (creates a
+//     content_idea with status='ready' — auto-approved as of v21)
+//   • Auto-scheduler (every 5 min) picks the ready idea and triggers
+//     render-shortform → Remotion (Railway, ~3 min)
+//   • Auto-scheduler then publishes to YT + TikTok + Instagram on its
+//     next ticks (one platform per tick)
+//
+// The "next pipeline run" the operator cares about is the editorial
+// brief — because that's the moment a new idea materialises. Everything
+// downstream is automatic and quick (~10-15 min from brief to all 3
+// platforms posted).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Schedule constants — match what's in pg_cron exactly.
+const EDITORIAL_HOURS_UTC = [5, 11, 17, 23]; // xx:30 each
+const INGEST_HOURS_UTC = [5, 11, 17, 23];    // xx:00 each
+const EDITORIAL_MINUTE_UTC = 30;
+const INGEST_MINUTE_UTC = 0;
+
+/** Compute the next UTC Date for a given list of hours + minute. */
+function nextScheduledRun(hoursUtc: number[], minuteUtc: number): Date {
+  const now = new Date()
+  for (let dayOffset = 0; dayOffset < 2; dayOffset++) {
+    for (const hour of hoursUtc) {
+      const candidate = new Date(now)
+      candidate.setUTCDate(now.getUTCDate() + dayOffset)
+      candidate.setUTCHours(hour, minuteUtc, 0, 0)
+      if (candidate.getTime() > now.getTime()) return candidate
+    }
+  }
+  // Shouldn't reach here, but return a safe fallback
+  const fallback = new Date(now)
+  fallback.setUTCDate(now.getUTCDate() + 1)
+  fallback.setUTCHours(hoursUtc[0], minuteUtc, 0, 0)
+  return fallback
+}
+
+/** "2h 17m" / "47m" / "32s" countdown string. */
+function fmtCountdown(target: Date, now: Date): string {
+  const deltaMs = target.getTime() - now.getTime()
+  if (deltaMs <= 0) return 'any moment'
+  const totalSec = Math.floor(deltaMs / 1000)
+  const h = Math.floor(totalSec / 3600)
+  const m = Math.floor((totalSec % 3600) / 60)
+  const s = totalSec % 60
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
+}
+
+function fmtClock(d: Date, tz: string, label: string): string {
+  const time = new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).format(d)
+  return `${time} ${label}`
+}
+
+function NextRunCard() {
+  const [now, setNow] = useState<Date>(() => new Date())
+
+  // Tick every second so the countdown stays live.
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  const nextEditorial = nextScheduledRun(EDITORIAL_HOURS_UTC, EDITORIAL_MINUTE_UTC)
+  const nextIngest = nextScheduledRun(INGEST_HOURS_UTC, INGEST_MINUTE_UTC)
+  // The editorial run is the operator-facing "new content" moment.
+  const editorialCountdown = fmtCountdown(nextEditorial, now)
+
+  // Estimated end-of-flow timestamp: editorial + 15 min covers render
+  // (~3 min) + 3 publish ticks (each on a 5-min cron boundary).
+  const estimatedPosted = new Date(nextEditorial.getTime() + 15 * 60 * 1000)
+
+  return (
+    <div style={{
+      padding: '20px 24px',
+      borderRadius: 14,
+      background: `linear-gradient(135deg, ${C.navyLighter} 0%, #16243a 100%)`,
+      border: `1px solid ${C.gold}40`,
+      boxShadow: `0 0 24px ${C.gold}15`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 18, flexWrap: 'wrap' }}>
+        {/* Big countdown */}
+        <div style={{ flex: '0 0 auto', minWidth: 200 }}>
+          <div style={{
+            fontSize: 11, fontWeight: 700, color: C.gold,
+            letterSpacing: 1.4, textTransform: 'uppercase', marginBottom: 8,
+          }}>
+            ⏱ Next Pipeline Run
+          </div>
+          <div style={{
+            fontSize: 38, fontWeight: 800, color: '#fff',
+            lineHeight: 1, fontVariantNumeric: 'tabular-nums',
+            marginBottom: 6,
+          }}>
+            {editorialCountdown}
+          </div>
+          <div style={{ fontSize: 12, color: C.slate }}>
+            until next editorial brief
+          </div>
+        </div>
+
+        {/* Sequence breakdown */}
+        <div style={{ flex: 1, minWidth: 260 }}>
+          <div style={{
+            fontSize: 12, fontWeight: 600, color: C.slate,
+            letterSpacing: 0.4, marginBottom: 10,
+          }}>
+            WHAT&apos;S HAPPENING NEXT
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <RunRow
+              dot="#60a5fa"
+              label="Ingest (Twitter + RSS)"
+              time={fmtClock(nextIngest, 'UTC', 'UTC')}
+              alt={fmtClock(nextIngest, 'Africa/Cairo', 'Cairo')}
+            />
+            <RunRow
+              dot={C.gold}
+              label="Editorial brief (new idea)"
+              time={fmtClock(nextEditorial, 'UTC', 'UTC')}
+              alt={fmtClock(nextEditorial, 'Africa/Cairo', 'Cairo')}
+              highlight
+            />
+            <RunRow
+              dot="#c084fc"
+              label="Render starts"
+              time="~5 min after editorial"
+              alt="auto-scheduler picks up"
+            />
+            <RunRow
+              dot="#4ade80"
+              label="Posted to YT + TT + IG"
+              time={`~ ${fmtClock(estimatedPosted, 'UTC', 'UTC')}`}
+              alt={`${fmtClock(estimatedPosted, 'Africa/Cairo', 'Cairo')}`}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div style={{
+        marginTop: 14, paddingTop: 12,
+        borderTop: `1px solid ${C.navyBorder}`,
+        fontSize: 11, color: '#5a708d', display: 'flex',
+        justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
+      }}>
+        <span>Auto-scheduler runs every 5 min · refresh-metrics every 30 min</span>
+        <span>Schedules: ingest at 05/11/17/23:00 UTC · brief at :30</span>
+      </div>
+    </div>
+  )
+}
+
+function RunRow({
+  dot, label, time, alt, highlight,
+}: {
+  dot: string; label: string; time: string; alt?: string; highlight?: boolean
+}) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: highlight ? '6px 10px' : '4px 0',
+      borderRadius: highlight ? 6 : 0,
+      backgroundColor: highlight ? 'rgba(244,194,13,0.08)' : 'transparent',
+    }}>
+      <div style={{
+        width: 8, height: 8, borderRadius: '50%',
+        background: dot, boxShadow: `0 0 6px ${dot}80`,
+        flexShrink: 0,
+      }} />
+      <span style={{
+        fontSize: 13, color: highlight ? '#fff' : '#cbd5e1',
+        fontWeight: highlight ? 600 : 500, flex: 1,
+      }}>
+        {label}
+      </span>
+      <span style={{
+        fontSize: 12, color: highlight ? '#F4C20D' : C.slate,
+        fontWeight: highlight ? 700 : 500,
+        fontVariantNumeric: 'tabular-nums',
+        textAlign: 'right',
+      }}>
+        {time}
+        {alt && (
+          <span style={{ display: 'block', fontSize: 10, color: '#5a708d', fontWeight: 400 }}>
+            {alt}
+          </span>
+        )}
+      </span>
     </div>
   )
 }
