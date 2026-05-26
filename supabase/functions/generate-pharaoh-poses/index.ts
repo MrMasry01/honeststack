@@ -25,8 +25,14 @@ const OWNER_ID = "e7564e43-6b02-4c40-9ecf-1c65fffafe9a";
 const STORAGE_BUCKET = "assets";
 const GEMINI_MODEL = "gemini-2.5-flash-image";
 
+// v3 master (May 2026) — premium illustration upgrade. Same character DNA as
+// v2 (Egyptian Pharaoh, gold/black/red nemes, red Egypt kit, soccer ball) but
+// rendered in Arcane/Riot-tier 2D — proper cel shading, thin variable-weight
+// outline, subtle rim light, balanced proportions, Egyptian eagle crest on
+// the chest. Generated via Bloom (pro model) image-edit on the v2 mascot, then
+// committed here so Gemini I2I can pin pose-library regeneration to this style.
 const PHARAOH_BASE_URL =
-  "https://raw.githubusercontent.com/MrMasry01/honeststack/main/brand/honeststack-mascot.png";
+  "https://raw.githubusercontent.com/MrMasry01/honeststack/main/brand/pharaoh-master-v3.png";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -37,11 +43,24 @@ function jsonResponse(body: unknown, status = 200): Response {
 // The full pose library. Edit prompts here to regenerate with new
 // instructions. Style stays consistent because the reference image
 // pins identity and rendering style.
+// v3 style suffix — matches the upgraded Bloom-edited master. The PRIOR
+// version asked for "flat 2D cartoon vector with thick black outlines"
+// which produced clip-art tier art. This one demands premium illustration
+// quality (Arcane / Riot splash art / Spider-Verse tier) while preserving
+// the same character identity.
 const STYLE_SUFFIX =
-  " Same flat 2D cartoon vector style with thick black outlines as the reference. " +
-  "Keep the gold-striped Pharaoh nemes headdress, red Egyptian football jersey, " +
-  "and the same friendly face. Plain pure white background (will be background-removed " +
-  "downstream). Full body unless the pose specifies head-only. Centered in frame.";
+  " Render in the EXACT same premium 2D character illustration style as the " +
+  "reference image: proper cel shading with soft gradients, thin variable-" +
+  "weight outline (NOT a thick uniform black outline), volumetric shading on " +
+  "the headdress (metallic gold highlights on the gold/black stripes), " +
+  "fabric folds on the red Egypt jersey, ambient occlusion under the chin " +
+  "and arms, a subtle cinematic rim light from the upper-right. Detailed " +
+  "Egyptian eagle crest on the chest. Balanced 4-head ratio proportions " +
+  "(NOT chibi). Same friendly recognisable face as the reference. Pure " +
+  "white background (will be background-removed downstream). Full body " +
+  "unless the pose specifies head-only. Centered in frame. Style reference " +
+  "axis: Arcane / Riot splash art / Spider-Verse — premium 2D animation " +
+  "tier, NOT flat vector mascot tier.";
 
 const POSES: Record<string, string> = {
   "idle-talk":
