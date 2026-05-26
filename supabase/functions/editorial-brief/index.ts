@@ -223,7 +223,7 @@ The voice runs through ElevenLabs eleven_multilingual_v2. Two mechanical rules m
 
 14. **CAPTION FORMAT DIVERSITY (HARD RULE).** Across the roundup's 5-7 captions, you MUST use at least 3 of the 5 patterns: (a) NUMBER-FIRST shock ("صفر من ريال 🤯", "4 لاعيبة اتشَطبوا!"); (b) PULLED QUOTE in quotes ("'أطول ليلة في حياتي' 👑"); (c) CONTRADICTION ("بَطل 2009 → درجة تانية 😢"); (d) RHETORICAL QUESTION ("تَفتكِر هَيلحَق؟ 🤔"); (e) NAME + verb + emoji — MAX 2 of these per roundup, NOT 5. If 3 captions in your draft share the same pattern, REWRITE the duplicates.
 
-9. NEVER use stock motivational closings like «ودمتم بخير», «والسلام عليكم», «إلى اللقاء». Close on a question or a hard cut.
+15. NEVER use stock motivational closings like «ودمتم بخير», «والسلام عليكم», «إلى اللقاء». Close on a question or a hard cut.
 
 == ON-SCREEN CAPTION vs NARRATION (NEW — IMPORTANT) ==
 Every segment now has TWO Arabic texts. They are NOT the same.
