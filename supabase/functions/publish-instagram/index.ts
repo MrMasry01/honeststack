@@ -90,19 +90,37 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+// Growth-CTA tails — same rotation as TikTok/YouTube. Reply velocity in
+// the first hour is the strongest IG Reels ranking signal we can move.
+const IG_CTA_TAILS = [
+  "💬 رأيك تحت — مين شَدَّك أكتر؟",
+  "💾 احفظها للماتش، وكَمَّل معايا.",
+  "🇪🇬 تابعني — أنا بَنَزَّل ٤ مَرّات في اليوم.",
+  "🔁 ابعتها للي نام النَّهارده الصبح.",
+];
+
+function pickIgCta(assetId: string): string {
+  let sum = 0;
+  for (let i = 0; i < assetId.length; i++) sum = (sum + assetId.charCodeAt(i)) | 0;
+  return IG_CTA_TAILS[Math.abs(sum) % IG_CTA_TAILS.length];
+}
+
 function buildCaption(idea: Idea | null, asset: Asset): string {
   const raw = idea?.hook ?? asset.caption ?? "أخبار كأس العالم 2026";
   const baseTags = Array.isArray(asset.hashtags) ? asset.hashtags : [];
   const merged = Array.from(
     new Set([...baseTags, ...INSTAGRAM_TOP_HASHTAGS]),
   ).slice(0, 10);
+  const cta = pickIgCta(asset.id);
+  const ctaBlock = `\n\n${cta}`;
   const tagBlock = "\n\n" +
     merged.map((t) => `#${t.replace(/^#/, "")}`).join(" ");
-  const maxHookLen = INSTAGRAM_CAPTION_CAP - tagBlock.length;
+  const overhead = ctaBlock.length + tagBlock.length;
+  const maxHookLen = INSTAGRAM_CAPTION_CAP - overhead;
   const hook = raw.length > maxHookLen
     ? raw.slice(0, maxHookLen - 3) + "..."
     : raw;
-  return `${hook}${tagBlock}`;
+  return `${hook}${ctaBlock}${tagBlock}`;
 }
 
 // Step 1: create the container.

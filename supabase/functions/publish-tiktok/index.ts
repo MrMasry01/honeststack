@@ -122,18 +122,38 @@ const TIKTOK_TOP_HASHTAGS = [
 // under to leave room for the hashtag block.
 const TIKTOK_CAPTION_CAP = 2000;
 
+// Growth-CTA rotation. The single biggest unlock on TikTok cold-start is
+// REPLY VELOCITY in the first hour — the platform reads "creator cares"
+// from comment activity. Every caption now appends one of these tails so
+// the in-video CTA gets reinforced in the scroll-stop moment.
+// Deterministic rotation by asset_id char-sum so same asset always picks
+// the same tail (stable for future A/B analysis).
+const TIKTOK_CTA_TAILS = [
+  "💬 رأيك تحت — مين شَدَّك أكتر؟",
+  "💾 احفظها للماتش، وكَمَّل معايا.",
+  "🇪🇬 تابعني — أنا بَنَزَّل ٤ مَرّات في اليوم.",
+  "🔁 ابعتها للي نام النَّهارده الصبح.",
+];
+
+function pickCta(assetId: string): string {
+  let sum = 0;
+  for (let i = 0; i < assetId.length; i++) sum = (sum + assetId.charCodeAt(i)) | 0;
+  return TIKTOK_CTA_TAILS[Math.abs(sum) % TIKTOK_CTA_TAILS.length];
+}
+
 function buildTitle(idea: Idea | null, asset: Asset): string {
   const raw = idea?.hook ?? asset.caption ?? "أخبار كأس العالم 2026";
-  // Append asset-specific hashtags first (editorial choices), then top
-  // TikTok-native tags, de-duped. Keep total under the cap.
   const baseTags = Array.isArray(asset.hashtags) ? asset.hashtags : [];
   const merged = Array.from(new Set([...baseTags, ...TIKTOK_TOP_HASHTAGS]))
-    .slice(0, 7); // 7 is the upper bound TikTok rewards.
+    .slice(0, 7);
+  const cta = pickCta(asset.id);
+  const ctaBlock = `\n\n${cta}`;
   const tagBlock = "\n\n" + merged.map((t) => `#${t.replace(/^#/, "")}`).join(" ");
 
-  const maxHookLen = TIKTOK_CAPTION_CAP - tagBlock.length;
+  const overhead = ctaBlock.length + tagBlock.length;
+  const maxHookLen = TIKTOK_CAPTION_CAP - overhead;
   const hook = raw.length > maxHookLen ? raw.slice(0, maxHookLen - 3) + "..." : raw;
-  return `${hook}${tagBlock}`;
+  return `${hook}${ctaBlock}${tagBlock}`;
 }
 
 // FILE_UPLOAD init. Returns publish_id + upload_url. We don't use

@@ -125,16 +125,35 @@ function buildVideoTitle(idea: Idea | null, asset: Asset): string {
   return raw.length > 100 ? raw.slice(0, 97) + "..." : raw;
 }
 
+// Growth-CTA tails — same rotation logic as TikTok/Instagram for
+// consistency. Reply velocity is a YouTube Shorts ranking signal too:
+// the first comments in the first hour drive shelf placement.
+const YT_CTA_TAILS = [
+  "💬 رأيك في الكومنتات تحت — مين شَدَّك أكتر؟",
+  "💾 احفظها للماتش، وكَمَّل معايا.",
+  "🇪🇬 تابعني هنا — أنا بَنَزَّل ٤ مَرّات في اليوم.",
+  "🔁 ابعتها للي نام النَّهارده.",
+];
+
+function pickYtCta(assetId: string): string {
+  let sum = 0;
+  for (let i = 0; i < assetId.length; i++) sum = (sum + assetId.charCodeAt(i)) | 0;
+  return YT_CTA_TAILS[Math.abs(sum) % YT_CTA_TAILS.length];
+}
+
 function buildVideoDescription(idea: Idea | null, asset: Asset, hashtags: string[]): string {
   const hook = idea?.hook ?? asset.caption ?? "";
-  const cta = idea?.brief && typeof idea.brief === "object"
+  const editorialCta = idea?.brief && typeof idea.brief === "object"
     ? (idea.brief as Record<string, unknown>).cta as string | undefined
     : undefined;
+  const growthCta = pickYtCta(asset.id);
 
   const tagBlock = hashtags.map((h) => `#${h.replace(/^#/, "")}`).join(" ");
   return [
     hook,
-    cta ?? "",
+    "",
+    growthCta,
+    editorialCta ?? "",
     "",
     tagBlock,
     "",
