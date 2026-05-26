@@ -50,7 +50,10 @@ export default function Overview() {
         supabase.from('content_ideas').select('status'),
         supabase.from('assets').select('id, created_at', { count: 'exact' }).order('created_at', { ascending: false }).limit(1),
         supabase.from('posts_queue').select('status'),
-        supabase.from('post_metrics').select('views, likes, shares'),
+        // Query the latest-per-post view — post_metrics is now append-only
+        // for time-series, so summing the raw table would double-count
+        // every snapshot. The view returns one row per post (latest).
+        supabase.from('latest_post_metrics').select('views, likes, shares'),
       ])
 
       const rawRows = rawRecent.data || []

@@ -345,10 +345,17 @@ Deno.serve(async (req: Request) => {
 
     // Bulk upsert: post_id is the natural key (one row per post).
     if (upserts.length > 0) {
+      // INSERT (append-only) — previously upserted on post_id which
+      // overwrote every prior measurement. With append-only we keep a
+      // full time series (one row per (post_id, measured_at) tick),
+      // letting the cockpit draw view-over-time charts and answer
+      // questions like "did the 18-24 primetime slot actually win?".
+      // The `latest_post_metrics` view returns the most recent row per
+      // post_id for cockpit totals.
       const { error: upErr } = await supabase
         .from("post_metrics")
-        .upsert(upserts, { onConflict: "post_id" });
-      if (upErr) throw new Error(`post_metrics upsert: ${upErr.message}`);
+        .insert(upserts);
+      if (upErr) throw new Error(`post_metrics insert: ${upErr.message}`);
     }
 
     return jsonResponse({
