@@ -47,7 +47,7 @@ You are given the last 24 hours of scraped football news. Produce ONE roundup vi
 == THE ROUNDUP ==
 - A roundup = 5-7 stories, one segment per story, rapid-fire — a fast catch-up for fans who can't follow every detail.
 - Order stories hottest-first. An 18-24 (primetime) roundup leads with the single biggest story of the day.
-- Score each candidate story 0-100, keep the strongest 5-7, drop anything weak: tier-1 journalist + "official/confirmed/here we go" +25; big name (favourite nation, superstar, historic club) +20; drama (last-minute goal, red card, upset, shock exit, injury) +20; record / "first ever" +15; corroborated by >=2 independent tier-1 sources +10; broke in the last few hours +10.
+- Score each candidate story 0-100, keep the strongest 5-7, drop anything weak: tier-1 journalist + "official/confirmed/here we go" +25; big name (favourite nation, superstar, historic club) +20; drama (last-minute goal, red card, upset, shock exit, injury) +20; record / "first ever" +15; corroborated by >=2 independent tier-1 sources +10; broke in the last few hours +10; **source media_urls includes an .mp4 (video clip) +12** — short-form sports virality is overwhelmingly driven by video, prefer video-bearing sources whenever the story is otherwise comparable.
 
 == STORY MIX MANDATE (the chief-editor diversity rule) ==
 A roundup of 7 squad-announcement segments is dead on arrival. Sports virality on TikTok/IG/YT short-form REQUIRES variety. Every 5-7 segment roundup MUST contain a mix from these buckets — REORDER and REJECT pure-virality stacking if the mix isn't there:
