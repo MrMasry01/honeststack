@@ -468,14 +468,19 @@ function DoneCard({
   // Per-platform publish state from posts_queue.
   const ytQueue = queueForAsset.find(q => q.platform === 'youtube')
   const ttQueue = queueForAsset.find(q => q.platform === 'tiktok')
+  const igQueue = queueForAsset.find(q => q.platform === 'instagram')
 
-  const [publishing, setPublishing] = useState<'youtube' | 'tiktok' | null>(null)
+  const [publishing, setPublishing] = useState<'youtube' | 'tiktok' | 'instagram' | null>(null)
   const [publishError, setPublishError] = useState<string | null>(null)
 
-  async function publish(platform: 'youtube' | 'tiktok') {
+  async function publish(platform: 'youtube' | 'tiktok' | 'instagram') {
     setPublishing(platform)
     setPublishError(null)
-    const fnName = platform === 'youtube' ? 'publish-youtube' : 'publish-tiktok'
+    const fnName = platform === 'youtube'
+      ? 'publish-youtube'
+      : platform === 'tiktok'
+      ? 'publish-tiktok'
+      : 'publish-instagram'
     const { data, error } = await supabase.functions.invoke(fnName, {
       body: { asset_id: asset.id },
     })
@@ -604,6 +609,17 @@ function DoneCard({
             disabledHint={!tiktokConnected ? 'Connect TikTok in Connections tab' : undefined}
             onPublish={() => publish('tiktok')}
           />
+          {/* Instagram — connected server-side via Graph API token,
+              same pattern as YouTube. No per-user OAuth gate. */}
+          <PublishRow
+            platform="instagram"
+            label="Instagram"
+            color="#DD2A7B"
+            queue={igQueue}
+            publishing={publishing === 'instagram'}
+            disabled={publishing !== null}
+            onPublish={() => publish('instagram')}
+          />
           {publishError && (
             <div style={{ fontSize: 11, color: C.red, marginTop: 4 }}>
               {publishError}
@@ -625,7 +641,7 @@ function PublishRow({
   disabledHint,
   onPublish,
 }: {
-  platform: 'youtube' | 'tiktok'
+  platform: 'youtube' | 'tiktok' | 'instagram'
   label: string
   color: string
   queue: QueueItem | undefined
