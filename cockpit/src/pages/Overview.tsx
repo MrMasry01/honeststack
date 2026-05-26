@@ -110,6 +110,10 @@ export default function Overview() {
         </p>
       </div>
 
+      {/* Pipeline health — red banner if anything is silently broken.
+          Updated every 30 min by hs-heartbeat-watchdog cron. */}
+      <HealthBanner />
+
       {/* Next pipeline run — when fresh ideas/renders/posts will appear */}
       <NextRunCard />
 
@@ -221,6 +225,77 @@ export default function Overview() {
             </div>
           </div>
         </Card>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HealthBanner — surfaces system_health row populated by the
+// heartbeat-watchdog cron every 30 min. Only renders when issues
+// exist; otherwise stays out of the way.
+// ─────────────────────────────────────────────────────────────────────────────
+interface HealthCheck {
+  name: string
+  ok: boolean
+  value: string | number | null
+  threshold: string
+  message: string
+}
+interface SystemHealth {
+  ok: boolean
+  checks: HealthCheck[]
+  issues: HealthCheck[]
+  ran_at: string
+}
+
+function HealthBanner() {
+  const [health, setHealth] = useState<SystemHealth | null>(null)
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from('system_health')
+        .select('ok, checks, issues, ran_at')
+        .eq('id', 'singleton')
+        .maybeSingle()
+      if (data) setHealth(data as unknown as SystemHealth)
+    })()
+  }, [])
+
+  if (!health || health.ok) return null  // hide when green
+
+  return (
+    <div style={{
+      padding: '14px 18px',
+      borderRadius: 12,
+      background: 'linear-gradient(135deg, rgba(239,68,68,0.18) 0%, rgba(239,68,68,0.08) 100%)',
+      border: '1px solid rgba(239,68,68,0.45)',
+      display: 'flex',
+      gap: 14,
+      alignItems: 'flex-start',
+    }}>
+      <div style={{ fontSize: 22, lineHeight: 1 }}>⚠️</div>
+      <div style={{ flex: 1 }}>
+        <div style={{
+          fontSize: 12, fontWeight: 700, color: '#fca5a5',
+          letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: 6,
+        }}>
+          Pipeline health — {health.issues.length} issue{health.issues.length === 1 ? '' : 's'}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {health.issues.map((c) => (
+            <div key={c.name} style={{
+              fontSize: 13, color: '#fee2e2',
+              padding: '4px 0',
+              borderBottom: '1px solid rgba(239,68,68,0.2)',
+            }}>
+              <strong style={{ color: '#fff' }}>{c.name}:</strong> {c.message}
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8 }}>
+          Last checked {formatDistanceToNow(new Date(health.ran_at), { addSuffix: true })} · re-runs every 30 min
+        </div>
       </div>
     </div>
   )
