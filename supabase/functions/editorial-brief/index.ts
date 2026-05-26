@@ -528,6 +528,18 @@ Deno.serve(async (req: Request) => {
     const urgency = Math.min(5, Math.max(1, Math.round(Number(roundup.urgency) || 3)));
 
     // ---- 9. insert the draft -------------------------------
+    // AUTO-APPROVE: status='ready' lands new ideas directly in the
+    // auto-scheduler's pickup queue. Quality is gated upstream by:
+    //   - caption_ar mandate (every segment must carry one)
+    //   - story mix mandate (player + team + stat + drama + leadup)
+    //   - regional bias (Egyptian/MENA priority)
+    //   - hot take rule
+    //   - anti-duplication (source_ids excluded from 48h history)
+    //   - pose mandate (per-segment pharaoh_pose hints)
+    // If any auto-generated batch ever ships visibly bad output, the
+    // recovery path is: pause the hs-auto-scheduler cron, fix the
+    // editorial brief, regenerate. Manual approval is no longer the
+    // safety net — quality gates upstream are.
     const { data: inserted, error: insErr } = await supabase
       .from("content_ideas")
       .insert({
@@ -538,7 +550,7 @@ Deno.serve(async (req: Request) => {
         format: "short_video",
         platforms: ["instagram", "youtube", "tiktok"],
         urgency,
-        status: "draft",
+        status: "ready",
         language: "ar-EG",
         time_bucket: bucket,
         script_segments: roundup.script_segments,
