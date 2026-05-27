@@ -4,8 +4,16 @@ import {
   spring,
   useCurrentFrame,
   useVideoConfig,
+  Img,
+  staticFile,
 } from "remotion";
 import { loadFont } from "@remotion/google-fonts/Cairo";
+
+// Pharaoh in the outro (May 2026) — walk-out-right pose (looking back
+// over shoulder, waving goodbye). Reinforces the "see you next round"
+// cadence the CTA text promises ("تابعوني — أنا بَنزّل ٤ مرّات في اليوم").
+// Placed bottom-left so it doesn't crowd the centered handle + button.
+const PHARAOH_WAVE_GOODBYE = staticFile("poses/walk-out-right.png");
 
 loadFont("normal", {
   weights: ["700", "800", "900"],
@@ -46,6 +54,21 @@ export const OutroCard: React.FC<OutroCardProps> = ({
 
   // Pulsing follow button
   const pulseScale = 1 + 0.04 * Math.sin((frame / fps) * 2 * Math.PI * 1.2);
+
+  // Pharaoh entrance — slides in from off-screen left, slightly delayed
+  // so handle reads first, then mascot waves "bye".
+  const pharaohSpring = spring({
+    fps,
+    frame: Math.max(0, frame - 10),
+    config: { damping: 14, stiffness: 90 },
+    durationInFrames: 28,
+  });
+  const pharaohX = interpolate(pharaohSpring, [0, 1], [-300, 0]);
+  const pharaohOpacity = interpolate(pharaohSpring, [0, 0.4], [0, 1], {
+    extrapolateRight: "clamp",
+  });
+  // Subtle wave / bob over the 3-second outro.
+  const pharaohBob = -Math.abs(Math.sin((frame / fps) * Math.PI * 1.4)) * 6;
 
   return (
     <div
@@ -184,6 +207,43 @@ export const OutroCard: React.FC<OutroCardProps> = ({
         >
           FIFA World Cup 2026 • USA Mexico Canada
         </span>
+      </div>
+
+      {/* Pharaoh waving goodbye — bottom-left, ~32% frame height.
+          Stays clear of the centered handle + button so it accents
+          rather than crowds. Soft accent halo behind the mascot. */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 40,
+          left: 40,
+          width: Math.round(height * 0.32 * 0.62),
+          height: Math.round(height * 0.32),
+          transform: `translate(${pharaohX}px, ${pharaohBob}px)`,
+          opacity: pharaohOpacity,
+          pointerEvents: "none",
+          filter: `drop-shadow(0 14px 24px rgba(0,0,0,0.55)) drop-shadow(0 0 24px ${brand.accent}33)`,
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: `radial-gradient(ellipse at 50% 90%, ${brand.accent}33 0%, transparent 55%)`,
+            pointerEvents: "none",
+          }}
+        />
+        <Img
+          src={PHARAOH_WAVE_GOODBYE}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "contain",
+            objectPosition: "bottom center",
+          }}
+        />
       </div>
     </div>
   );

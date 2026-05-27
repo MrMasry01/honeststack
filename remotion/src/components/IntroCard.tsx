@@ -5,8 +5,16 @@ import {
   useCurrentFrame,
   useVideoConfig,
   Img,
+  staticFile,
 } from "remotion";
 import { loadFont } from "@remotion/google-fonts/Cairo";
+
+// Pharaoh mascot brought into intro/outro (May 2026). Previously the
+// intro was logo-only; introducing the host upfront primes the viewer
+// to expect a personality, not just a news ticker. We use the
+// `celebrating` pose (arms up, joyful) — reads as "welcome to the
+// show" and matches the WC 2026 hype framing.
+const PHARAOH_CELEBRATING = staticFile("poses/celebrating.png");
 
 loadFont("normal", {
   weights: ["700", "800", "900"],
@@ -58,6 +66,21 @@ export const IntroCard: React.FC<IntroCardProps> = ({
 
   // Animated ring around logo
   const ringRotation = (frame / durationInFrames) * 360;
+
+  // Pharaoh entrance — slight delay vs logo so the eye reads
+  // logo→title→mascot in sequence. Pops up from below.
+  const pharaohSpring = spring({
+    fps,
+    frame: Math.max(0, frame - 14),
+    config: { damping: 10, stiffness: 90 },
+    durationInFrames: 22,
+  });
+  const pharaohY = interpolate(pharaohSpring, [0, 1], [180, 0]);
+  const pharaohOpacity = interpolate(pharaohSpring, [0, 0.4], [0, 1], {
+    extrapolateRight: "clamp",
+  });
+  // Subtle breath bob across the 3-second card.
+  const pharaohBreath = Math.sin((frame / fps) * 2 * Math.PI * 0.6) * 4;
 
   return (
     <div
@@ -226,6 +249,50 @@ export const IntroCard: React.FC<IntroCardProps> = ({
         >
           HonestStack
         </span>
+      </div>
+
+      {/* Pharaoh mascot — anchored bottom-center, half the frame height.
+          Sits BEHIND text via z-index because the gradient backdrop sits
+          underneath everything. The pose PNG has a white background that
+          gets knocked-out at runtime by Host's whiteKey system in the
+          per-segment scenes; for the intro/outro we composite with a
+          tinted radial spotlight underneath so the white edges blend
+          into the gradient without needing the heavy keying step. */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 0,
+          left: "50%",
+          width: Math.round(height * 0.42 * 0.65),
+          height: Math.round(height * 0.42),
+          transform: `translate(-50%, ${pharaohY + pharaohBreath}px)`,
+          opacity: pharaohOpacity,
+          pointerEvents: "none",
+          filter: `drop-shadow(0 18px 32px rgba(0,0,0,0.55)) drop-shadow(0 0 30px ${brand.accent}33)`,
+        }}
+      >
+        {/* Soft contact-pool spotlight so the mascot reads as standing
+            on a lit stage rather than floating in a gradient. */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: `radial-gradient(ellipse at 50% 90%, ${brand.accent}33 0%, transparent 55%)`,
+            pointerEvents: "none",
+          }}
+        />
+        <Img
+          src={PHARAOH_CELEBRATING}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "contain",
+            objectPosition: "bottom center",
+            mixBlendMode: "normal",
+          }}
+        />
       </div>
     </div>
   );
