@@ -225,6 +225,13 @@ The voice runs through ElevenLabs eleven_multilingual_v2. Two mechanical rules m
 
 15. NEVER use stock motivational closings like «ودمتم بخير», «والسلام عليكم», «إلى اللقاء». Close on a question or a hard cut.
 
+16. **STORYLINE DISCIPLINE.** The audience watches us 4x/day. Repeating the same Messi-injury beats across 3 consecutive videos burns their attention. For any RECENT STORY THREAD with coverage_count >= 2: you MUST either (a) advance it with a SPECIFIC new development you can name (a fresh quote, a confirmed test result, a new lineup decision, a federation statement), or (b) skip the topic entirely and find a different angle from the source pool. Vague "still recovering" / "still uncertain" / "no update yet" beats do NOT count as new info — that's regurgitation, and it costs us the next four windows of attention. When in doubt, SKIP the recurring storyline and lead with something the audience hasn't heard from you yet.
+
+== STORY-THREAD TAGGING (REQUIRED OUTPUT) ==
+Every brief MUST attach to 1-3 short-slug thread IDs that describe the storylines this roundup covers (\`thread_ids\`). Either REUSE an existing slug from the RECENT STORY THREADS section (if you are continuing/advancing it), or INVENT a new one for a fresh storyline. Format: kebab-case-with-context, e.g. \`messi-injury-pre-wc26\`, \`morocco-regragui-final-call\`, \`usmnt-pochettino-squad-reveal\`, \`salah-captaincy-debate\`. Keep slugs STABLE across days — if you write about the Salah captaincy debate tomorrow, reuse \`salah-captaincy-debate\`; do NOT mint a near-duplicate like \`salah-captain-talk\`. Pick the slug that best describes the THROUGH-LINE of the story, not today's specific micro-beat.
+
+Alongside \`thread_ids\`, return \`thread_updates\`: a map keyed by thread_id, where each value is \`{ label: <human-readable English title for the thread, e.g. "Messi injury pre-WC26">, latest_summary: <one short English sentence describing what is genuinely NEW in this roundup about that thread, e.g. "Scaloni confirms Messi will undergo MRI on Tuesday; status uncertain"> }\`. The label is what shows up in our editorial dashboard; the latest_summary is what the NEXT roundup will see as context for that thread, so it must be specific and factual — not "Messi still injured", but "MRI scheduled for Tuesday, Scaloni non-committal". Include an entry in \`thread_updates\` for EVERY id in \`thread_ids\` (both existing and newly-minted slugs).
+
 == ON-SCREEN CAPTION vs NARRATION (NEW — IMPORTANT) ==
 Every segment now has TWO Arabic texts. They are NOT the same.
 
@@ -290,16 +297,39 @@ Return JSON only, matching the provided schema:
 - hook: the roundup's Arabic headline, e.g. «أهم ٥ أخبار من كأس العالم النهارده».
 - urgency: integer 1-5 — the lead story's urgency (5 = breaking this window, 3 = standard, 1-2 = evergreen).
 - script_segments: 5-7 objects {text, image_prompt_or_url, duration_ms}; one per story; duration_ms between 6000 and 12000; text is the colloquial Egyptian Arabic line.
-- brief: {summary_en, virality_score (lead story, 0-100), source_ids (every contributing raw_sources id, across all stories), verification ("verified" | "partial" | "unverified"), stories (one short English line per story, in air order), cta (the closing Arabic question)}.`;
+- brief: {summary_en, virality_score (lead story, 0-100), source_ids (every contributing raw_sources id, across all stories), verification ("verified" | "partial" | "unverified"), stories (one short English line per story, in air order), cta (the closing Arabic question)}.
+- thread_ids: 1-3 kebab-case slugs naming the storylines this roundup covers (see STORY-THREAD TAGGING above).
+- thread_updates: object keyed by each thread_id → { label, latest_summary } (see STORY-THREAD TAGGING above).`;
 
 // ---- structured-output JSON schema -------------------------
 const ROUNDUP_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["hook", "urgency", "script_segments", "brief"],
+  required: ["hook", "urgency", "script_segments", "brief", "thread_ids", "thread_updates"],
   properties: {
     hook: { type: "string" },
     urgency: { type: "integer" },
+    thread_ids: {
+      type: "array",
+      minItems: 1,
+      maxItems: 3,
+      items: { type: "string" },
+    },
+    thread_updates: {
+      // map keyed by thread_id → { label, latest_summary }
+      // JSON Schema can't express "required keys come from another field",
+      // so we accept any string key and require label+latest_summary on each value.
+      type: "object",
+      additionalProperties: {
+        type: "object",
+        additionalProperties: false,
+        required: ["label", "latest_summary"],
+        properties: {
+          label: { type: "string" },
+          latest_summary: { type: "string" },
+        },
+      },
+    },
     script_segments: {
       type: "array",
       items: {
@@ -460,6 +490,65 @@ Deno.serve(async (req: Request) => {
     }
     const validIds = new Set(sources.map((s: { id: string }) => s.id));
 
+    // ---- 5c. pull active story threads from last 72h --------
+    // The brain needs to know which storylines we've already been hammering
+    // so it can either advance them with NEW info or skip them outright.
+    // Fail-safe: if this query errors for any reason, we proceed with an
+    // empty threads list — editorial must NEVER fail because story_threads
+    // is empty or unreachable.
+    type ActiveThread = {
+      id: string;
+      label: string;
+      coverage_count: number;
+      latest_summary: string | null;
+      last_covered_at: string;
+    };
+    let activeThreads: ActiveThread[] = [];
+    try {
+      const seventyTwoHoursAgo = new Date(
+        Date.now() - 72 * 60 * 60 * 1000,
+      ).toISOString();
+      const { data: threadRows, error: threadErr } = await supabase
+        .from("story_threads")
+        .select("id, label, coverage_count, latest_summary, last_covered_at")
+        .eq("owner_id", OWNER_ID)
+        .eq("status", "active")
+        .gte("last_covered_at", seventyTwoHoursAgo)
+        .order("coverage_count", { ascending: false })
+        .order("last_covered_at", { ascending: false })
+        .limit(20);
+      if (threadErr) {
+        console.error("story_threads query failed (continuing):", threadErr.message);
+      } else if (threadRows) {
+        activeThreads = threadRows as ActiveThread[];
+      }
+    } catch (threadCatch) {
+      console.error("story_threads query threw (continuing):", threadCatch);
+    }
+
+    // Render the threads block for the user message. If there are zero
+    // recent threads, we omit the section entirely (no empty header).
+    const renderRelativeAge = (iso: string): string => {
+      const ageMs = Date.now() - new Date(iso).getTime();
+      const ageHours = Math.max(0, Math.round(ageMs / (60 * 60 * 1000)));
+      if (ageHours < 1) return "<1h ago";
+      if (ageHours < 48) return `${ageHours}h ago`;
+      const ageDays = Math.round(ageHours / 24);
+      return `${ageDays}d ago`;
+    };
+    const threadsBlock = activeThreads.length === 0 ? "" :
+      `## RECENT STORY THREADS (last 72h)\n` +
+      `You have covered these storylines recently. For each one:\n` +
+      `- coverage_count >= 2 → MUST EITHER advance with materially new info (name the specific new development in the script) OR skip entirely. Do NOT regurgitate the same beats.\n` +
+      `- coverage_count = 1 → fine to continue if there's a new angle.\n\n` +
+      `Threads (id · coverage_count · last_covered · latest_summary):\n` +
+      activeThreads.map((t) =>
+        `- ${t.id} · ${t.coverage_count} · ${renderRelativeAge(t.last_covered_at)} · ${
+          t.latest_summary ? `"${t.latest_summary}"` : "(no summary)"
+        }`
+      ).join("\n") +
+      `\n\nWhen choosing thread_ids for THIS roundup, reuse one of the slugs above whenever you're continuing that storyline. Mint a new slug only for storylines that aren't already represented here.\n\n`;
+
     // ---- 6. call the Claude API ----------------------------
     // Compute today (Cairo) + days-to-WC so the model can anchor the
     // countdown narrative concretely.
@@ -484,9 +573,11 @@ Deno.serve(async (req: Request) => {
       `Days remaining: ${daysToKickoff}.\n\n` +
       `Time bucket: ${bucket}` +
       (bucket === "18-24" ? " (primetime — lead with the single biggest story of the day)." : ".") +
-      `\n\nThe scraped football news in the LAST 8 HOURS, pre-filtered to exclude anything already covered in a recent roundup (JSON). Reference each item's "id" in brief.source_ids:\n\n` +
+      `\n\n` +
+      threadsBlock +
+      `The scraped football news in the LAST 8 HOURS, pre-filtered to exclude anything already covered in a recent roundup (JSON). Reference each item's "id" in brief.source_ids:\n\n` +
       JSON.stringify(sources) +
-      `\n\nProduce ONE roundup video for this window now. Anchor it to the ${daysToKickoff}-day countdown. Return only the structured JSON.`;
+      `\n\nProduce ONE roundup video for this window now. Anchor it to the ${daysToKickoff}-day countdown. Return only the structured JSON (including thread_ids and thread_updates).`;
 
     const apiResp = await fetch(ANTHROPIC_URL, {
       method: "POST",
@@ -532,6 +623,8 @@ Deno.serve(async (req: Request) => {
       urgency: number;
       script_segments: unknown[];
       brief: { source_ids?: string[] } & Record<string, unknown>;
+      thread_ids?: unknown;
+      thread_updates?: unknown;
     };
     try {
       roundup = JSON.parse(textBlock.text);
@@ -582,6 +675,105 @@ Deno.serve(async (req: Request) => {
       .single();
     if (insErr) throw new Error(`content_ideas insert: ${insErr.message}`);
 
+    // ---- 10. story-thread bookkeeping ----------------------
+    // Validate the brain's thread payload, then in parallel:
+    //   (a) write thread_ids onto the content_ideas row we just inserted
+    //   (b) upsert each thread into story_threads (advance coverage_count
+    //       + last_covered_at + latest_summary, or insert a fresh one)
+    // Fail-safe: if anything in this block goes wrong, we log and
+    // continue — the content_idea is already inserted and the routine
+    // must not fail just because thread bookkeeping had a hiccup.
+    let threadsApplied: string[] = [];
+    try {
+      const rawIds = Array.isArray(roundup.thread_ids) ? roundup.thread_ids : [];
+      const cleanIds = rawIds
+        .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+        .map((id) => id.trim().toLowerCase())
+        .slice(0, 3);
+      const updatesMap = (roundup.thread_updates && typeof roundup.thread_updates === "object" && !Array.isArray(roundup.thread_updates))
+        ? roundup.thread_updates as Record<string, { label?: unknown; latest_summary?: unknown }>
+        : {};
+
+      // Humanise a slug for fallback labels: "messi-injury-pre-wc26" -> "Messi Injury Pre Wc26"
+      const humaniseSlug = (slug: string) =>
+        slug.split("-").map((w) => w.length === 0 ? w : w[0].toUpperCase() + w.slice(1)).join(" ");
+
+      if (cleanIds.length > 0 && inserted?.id) {
+        const ideaId = inserted.id;
+        const nowIso = new Date().toISOString();
+
+        // Build the per-thread upsert tasks. We can't use Postgres ON CONFLICT
+        // with arithmetic via supabase-js .upsert() cleanly (it would overwrite
+        // coverage_count to 1 instead of incrementing), so for existing rows
+        // we read-then-update. For new rows we insert.
+        const upsertTasks = cleanIds.map(async (threadId) => {
+          const u = updatesMap[threadId] ?? {};
+          const label = (typeof u.label === "string" && u.label.trim().length > 0)
+            ? u.label.trim()
+            : humaniseSlug(threadId);
+          const latestSummary = (typeof u.latest_summary === "string" && u.latest_summary.trim().length > 0)
+            ? u.latest_summary.trim()
+            : null;
+
+          const { data: existing, error: selErr } = await supabase
+            .from("story_threads")
+            .select("id, coverage_count")
+            .eq("id", threadId)
+            .eq("owner_id", OWNER_ID)
+            .maybeSingle();
+          if (selErr) {
+            console.error(`story_threads select(${threadId}) failed:`, selErr.message);
+            return;
+          }
+          if (existing) {
+            const { error: updErr } = await supabase
+              .from("story_threads")
+              .update({
+                coverage_count: (existing.coverage_count ?? 0) + 1,
+                last_covered_at: nowIso,
+                ...(latestSummary !== null ? { latest_summary: latestSummary } : {}),
+                ...(label ? { label } : {}),
+              })
+              .eq("id", threadId)
+              .eq("owner_id", OWNER_ID);
+            if (updErr) {
+              console.error(`story_threads update(${threadId}) failed:`, updErr.message);
+            }
+          } else {
+            const { error: insThreadErr } = await supabase
+              .from("story_threads")
+              .insert({
+                id: threadId,
+                owner_id: OWNER_ID,
+                label,
+                coverage_count: 1,
+                last_covered_at: nowIso,
+                latest_summary: latestSummary,
+                status: "active",
+              });
+            if (insThreadErr) {
+              console.error(`story_threads insert(${threadId}) failed:`, insThreadErr.message);
+            }
+          }
+        });
+
+        const writeIdsTask = supabase
+          .from("content_ideas")
+          .update({ thread_ids: cleanIds })
+          .eq("id", ideaId)
+          .then(({ error }) => {
+            if (error) console.error(`content_ideas.thread_ids update failed:`, error.message);
+          });
+
+        await Promise.all([...upsertTasks, writeIdsTask]);
+        threadsApplied = cleanIds;
+      } else if (cleanIds.length === 0) {
+        console.warn("brain returned no thread_ids — content_idea inserted without thread tagging");
+      }
+    } catch (threadBookkeepingErr) {
+      console.error("story-thread bookkeeping threw (continuing):", threadBookkeepingErr);
+    }
+
     return jsonResponse({
       ok: true,
       bucket,
@@ -590,6 +782,8 @@ Deno.serve(async (req: Request) => {
       hook: roundup.hook,
       segments: roundup.script_segments.length,
       sources_considered: sources.length,
+      threads_in_context: activeThreads.length,
+      threads_applied: threadsApplied,
     });
   } catch (err) {
     console.error("editorial-brief error:", err);
