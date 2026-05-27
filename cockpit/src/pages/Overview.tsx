@@ -319,11 +319,20 @@ function HealthBanner() {
 // platforms posted).
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Schedule constants — match what's in pg_cron exactly.
-const EDITORIAL_HOURS_UTC = [5, 11, 17, 23]; // xx:30 each
-const INGEST_HOURS_UTC = [5, 11, 17, 23];    // xx:00 each
-const EDITORIAL_MINUTE_UTC = 30;
-const INGEST_MINUTE_UTC = 0;
+// Schedule constants — MUST match what's in pg_cron exactly. These were
+// shifted to Cairo prime-time (task #95): editorial fires at the top of
+// each hour 05/11/19/22 UTC (= 08/14/22/01 Cairo) and ingest fires :30
+// before each one so fresh sources are available when the brain wakes up.
+// Verified against `SELECT schedule FROM cron.job` — if you change either
+// pg_cron entry, update these constants in the same commit.
+//
+//   pg_cron #3 hs-editorial-brief: `0 5,11,19,22 * * *`
+//   pg_cron #1 hs-ingest-twitter:  `30 4,10,18,21 * * *`
+//   pg_cron #2 hs-ingest-rss:      `30 4,10,18,21 * * *`
+const EDITORIAL_HOURS_UTC = [5, 11, 19, 22]; // HH:00 UTC, four daily fires
+const INGEST_HOURS_UTC = [4, 10, 18, 21];    // HH:30 UTC, one fire 30min before each editorial
+const EDITORIAL_MINUTE_UTC = 0;
+const INGEST_MINUTE_UTC = 30;
 
 /** Compute the next UTC Date for a given list of hours + minute. */
 function nextScheduledRun(hoursUtc: number[], minuteUtc: number): Date {
@@ -455,7 +464,7 @@ function NextRunCard() {
         justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
       }}>
         <span>Auto-scheduler runs every 5 min · refresh-metrics every 30 min</span>
-        <span>Schedules: ingest at 05/11/17/23:00 UTC · brief at :30</span>
+        <span>Schedules: ingest at 04/10/18/21:30 UTC · brief at 05/11/19/22:00 UTC</span>
       </div>
     </div>
   )
