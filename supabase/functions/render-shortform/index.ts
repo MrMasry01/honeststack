@@ -133,6 +133,98 @@ function convertNumbersToEgyptian(text: string): string {
     return numberToEgyptianWords(n);
   });
 }
+
+// ── MSA → Egyptian colloquial scrubber ────────────────────────────────────
+// Brute-force regex sanitizer. Replaces common Modern Standard Arabic (فصحى)
+// tokens that occasionally leak through the editor with their Egyptian
+// colloquial equivalents BEFORE the script reaches ElevenLabs v3.
+//
+// TRADE-OFFS — read before touching the table:
+//   - This is substring substitution, not morphological analysis. It catches
+//     the common 80% (demonstratives, question words, relative pronouns,
+//     negation particles) and may produce odd output on edge cases — e.g.
+//     stripping "لقد" mid-phrase, or substituting "إلى" → "لـ" inside a
+//     compound word. The editorial brain (honeststack-editor SKILL + system
+//     prompt) is the FIRST defense and is supposed to write in Egyptian to
+//     begin with; this is a safety net for MSA drift.
+//   - Arabic word boundaries don't behave like Latin \b in regex (no spaces
+//     reliably around punctuation, prefixes/suffixes glue onto words), so
+//     we use literal substring replacement with strategic ordering: longer
+//     keys first so "هؤلاء" matches before "هذا".
+//   - The ELEVENLABS_REGISTER_PREFIX audio tag does additional register
+//     anchoring at the TTS layer. Together: editor writes EG → scrubber
+//     catches MSA tokens that slipped in → prefix anchors v3's voicing.
+const MSA_TO_EGYPTIAN: Record<string, string> = {
+  // demonstratives
+  "هؤلاء": "دول",
+  "أولئك": "دول",
+  "هذه": "دي",
+  "هذا": "ده",
+  "ذلك": "ده",
+  "تلك": "دي",
+  // question words
+  "كيف": "إزاي",
+  "ماذا": "إيه",
+  "لماذا": "ليه",
+  "متى": "إمتى",
+  "أين": "فين",
+  // time / place
+  "الآن": "دلوقتي",
+  // (هنا / هناك intentionally unchanged — same in EG)
+  // relative pronouns
+  "الذين": "اللي",
+  "الذي": "اللي",
+  "التي": "اللي",
+  // MSA particles
+  "لقد": "",        // strip — awkward in Egyptian narration
+  "إنّ": "إن",
+  "أنّ": "إن",
+  // negation
+  "ليس": "مش",
+  "لست": "مش",
+  "لم": "ما",       // imperfect-past negation; EG is usually "ما...ش" but
+                    // safer to drop the suffix logic and let the editor handle it
+  // prepositions / connectives
+  "إلى": "لـ",
+  "حتى": "لحد",
+};
+
+// Substitution keys ordered longest-first so multi-character forms match
+// before their shorter substrings would. Computed once at module load.
+const MSA_KEYS_LONGEST_FIRST = Object.keys(MSA_TO_EGYPTIAN).sort(
+  (a, b) => b.length - a.length,
+);
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function scrubMSA(text: string): string {
+  let out = text;
+
+  // (1) Conditional strip of "قد" — only when it's at the start of the text
+  // or immediately after a sentence-ending punctuation mark. Mid-sentence
+  // "قد" can be a verb ("he has") or a noun meaning, so substring stripping
+  // would break unrelated words.
+  out = out.replace(/(^|[.?!؟।]\s*)قد\s+/g, "$1");
+
+  // (2) Conditional rewrite of "سوف يـ" → "هـ" (MSA future marker on an
+  // imperfect verb prefixed with ي). Anything else with "سوف" is left alone.
+  out = out.replace(/سوف\s+ي/g, "هي");
+
+  // (3) Bulk substitutions for the static map, longest key first.
+  for (const key of MSA_KEYS_LONGEST_FIRST) {
+    const replacement = MSA_TO_EGYPTIAN[key];
+    const re = new RegExp(escapeRegex(key), "g");
+    out = out.replace(re, replacement);
+  }
+
+  // (4) Collapse any double spaces introduced by strip-substitutions
+  // ("لقد" → "") and trim ends.
+  out = out.replace(/[ \t]{2,}/g, " ").replace(/ ([.,،؟!])/g, "$1").trim();
+
+  return out;
+}
 // Primary image model, plus a stable fallback used when the preview model
 // is rate-limited (preview models carry very tight free-tier quotas).
 const GEMINI_MODELS = ["gemini-3.1-flash-image-preview", "gemini-2.5-flash-image"];
@@ -188,6 +280,13 @@ type BuiltSegment = {
   duration_ms: number;  // set to actual MP3 duration so audio + visual stay synced
   ken_burns: { from: number; to: number };
   pharaoh_pose?: string; // optional pose hint — Remotion swaps to matching pose PNG
+  // Scene-composition metadata inferred from the resolved visual by a
+  // post-resolution Gemini Vision pass (analyzeSceneMetadata). All three
+  // fields are optional — on any vision error the analyzer returns safe
+  // defaults so the renderer always has something to work with.
+  scene_density?: "close" | "mid" | "wide";
+  subject_anchor?: "left" | "center" | "right";
+  ambient_hex?: string;
 };
 
 // ---- MP3 duration ------------------------------------------
@@ -285,13 +384,18 @@ async function generateNarration(
         "Accept": "audio/mpeg",
       },
       body: JSON.stringify({
-        // Two pre-TTS passes on the script:
-        //   1. convertNumbersToEgyptian — spells digits as Egyptian words so
-        //      v3 doesn't language-switch on "16 يوم" → "sixteen يوم".
-        //   2. ELEVENLABS_REGISTER_PREFIX — anchors the entire utterance in
+        // Three pre-TTS passes on the script, ORDER MATTERS:
+        //   1. scrubMSA — replaces common Modern Standard Arabic tokens
+        //      (هذا، كيف، الذي، لقد، إلى، …) with their Egyptian-colloquial
+        //      equivalents. Catches MSA drift that slipped past the editor.
+        //   2. convertNumbersToEgyptian — spells digits as Egyptian words so
+        //      v3 doesn't language-switch on "16 يوم" → "sixteen يوم". Runs
+        //      AFTER the MSA scrub in case a substitution introduces digits
+        //      (currently it doesn't, but defensive ordering is cheap).
+        //   3. ELEVENLABS_REGISTER_PREFIX — anchors the entire utterance in
         //      Egyptian colloquial register via v3's inline audio-tag system,
         //      preventing MSA drift on common function words.
-        text: `${ELEVENLABS_REGISTER_PREFIX}${convertNumbersToEgyptian(text)}`,
+        text: `${ELEVENLABS_REGISTER_PREFIX}${convertNumbersToEgyptian(scrubMSA(text))}`,
         model_id: ELEVENLABS_MODEL,
         voice_settings: {
           // Tuned for eleven_v3 + Egyptian sports creator voice:
@@ -554,6 +658,159 @@ async function verifyPersonPhoto(
     return !answer.startsWith("no");
   } catch {
     return true; // never fail the render over the verification step
+  }
+}
+
+// ============================================================
+// Scene-metadata vision pass
+// ------------------------------------------------------------
+// After a segment's visual_url is known, we run a SECOND Gemini Vision call
+// to extract a tiny shape-of-the-frame descriptor:
+//
+//   scene_density:   'close' | 'mid' | 'wide'   — how zoomed-in the subject is
+//   subject_anchor:  'left' | 'center' | 'right' — horizontal position of focus
+//   ambient_hex:     '#RRGGBB'                   — dominant frame tone
+//
+// Remotion uses these to:
+//   - Aim the Ken Burns pan toward the actual subject (no more zooming away
+//     from the face on a left-anchored shot).
+//   - Tint the caption bar / overlays so they harmonise with the photo
+//     instead of clashing.
+//   - Pick between bold and subtle title treatments based on density.
+//
+// SAFETY:
+//   - Never throws. On any failure (fetch, API error, malformed JSON) it
+//     returns brand-safe defaults so the pipeline keeps moving.
+//   - Skipped entirely for video URLs (.mp4 etc.) — Gemini Vision can't
+//     analyse a video frame easily and the renderer already treats video
+//     backdrops differently.
+// ============================================================
+type SceneMetadata = {
+  scene_density: "close" | "mid" | "wide";
+  subject_anchor: "left" | "center" | "right";
+  ambient_hex: string;
+};
+
+const SCENE_DEFAULTS: SceneMetadata = {
+  scene_density: "mid",
+  subject_anchor: "center",
+  ambient_hex: "#E63329", // brand red — safe fall-through tone
+};
+
+const VIDEO_EXT_RE = /\.(mp4|mov|webm|m4v|mkv)(\?|$)/i;
+
+const SCENE_VISION_PROMPT =
+  `You are analyzing a single still frame that will be used as a vertical ` +
+  `9:16 backdrop in a sports short-form video. Reply with ONLY a single JSON ` +
+  `object on one line — no prose, no markdown, no code fence. The schema is:\n` +
+  `{"scene_density":"close|mid|wide","subject_anchor":"left|center|right","ambient_hex":"#RRGGBB"}\n` +
+  `Definitions:\n` +
+  `- scene_density: "close" = a face or single subject fills more than 40% ` +
+  `of the frame; "wide" = environmental shot, stadium crowd, training pitch, ` +
+  `or multiple distant figures; "mid" = anything else (use this as the default ` +
+  `when unsure).\n` +
+  `- subject_anchor: where the primary focal subject sits horizontally — ` +
+  `"left" = left third, "right" = right third, "center" = otherwise.\n` +
+  `- ambient_hex: the dominant color tone of the frame in #RRGGBB format. ` +
+  `If you cannot decide, return "#E63329".`;
+
+function extractFirstJsonObject(raw: string): string | null {
+  if (!raw) return null;
+  // Strip a ```json or ``` fence if present.
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const body = fenced ? fenced[1] : raw;
+  // Find the first balanced { ... } block.
+  const start = body.indexOf("{");
+  if (start < 0) return null;
+  let depth = 0;
+  for (let i = start; i < body.length; i++) {
+    const c = body[i];
+    if (c === "{") depth++;
+    else if (c === "}") {
+      depth--;
+      if (depth === 0) return body.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+function normalizeSceneMetadata(parsed: unknown): SceneMetadata {
+  if (!parsed || typeof parsed !== "object") return { ...SCENE_DEFAULTS };
+  const p = parsed as Record<string, unknown>;
+  const density = String(p.scene_density ?? "").toLowerCase();
+  const anchor = String(p.subject_anchor ?? "").toLowerCase();
+  const hexRaw = String(p.ambient_hex ?? "").trim();
+  const hexOk = /^#[0-9a-fA-F]{6}$/.test(hexRaw);
+  return {
+    scene_density: (density === "close" || density === "wide")
+      ? density
+      : "mid",
+    subject_anchor: (anchor === "left" || anchor === "right")
+      ? anchor
+      : "center",
+    ambient_hex: hexOk ? hexRaw.toUpperCase() : SCENE_DEFAULTS.ambient_hex,
+  };
+}
+
+async function analyzeSceneMetadata(
+  imageUrl: string,
+  geminiKey: string,
+): Promise<SceneMetadata> {
+  // Video backdrops short-circuit. Renderer handles them on a different code
+  // path and Vision can't introspect them anyway.
+  if (!imageUrl || VIDEO_EXT_RE.test(imageUrl)) {
+    return { ...SCENE_DEFAULTS };
+  }
+  try {
+    const imgRes = await fetch(imageUrl, {
+      signal: AbortSignal.timeout(25_000),
+    });
+    if (!imgRes.ok) return { ...SCENE_DEFAULTS };
+    const buf = new Uint8Array(await imgRes.arrayBuffer());
+    // Cap base64 input size — Gemini accepts up to ~20MB inline but we never
+    // need anywhere near that for a backdrop frame. Bail to defaults if huge.
+    if (buf.length === 0 || buf.length > 8 * 1024 * 1024) {
+      return { ...SCENE_DEFAULTS };
+    }
+    let bin = "";
+    for (let k = 0; k < buf.length; k++) bin += String.fromCharCode(buf[k]);
+
+    const mime = (imgRes.headers.get("content-type") ?? "image/jpeg")
+      .split(";")[0].trim() || "image/jpeg";
+
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: SCENE_VISION_PROMPT },
+              { inlineData: { mimeType: mime, data: btoa(bin) } },
+            ],
+          }],
+        }),
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    if (!res.ok) return { ...SCENE_DEFAULTS };
+    const json = await res.json();
+    const text = (json?.candidates?.[0]?.content?.parts ?? [])
+      .map((p: { text?: string }) => p?.text ?? "")
+      .join(" ")
+      .trim();
+    const jsonBlock = extractFirstJsonObject(text);
+    if (!jsonBlock) return { ...SCENE_DEFAULTS };
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(jsonBlock);
+    } catch {
+      return { ...SCENE_DEFAULTS };
+    }
+    return normalizeSceneMetadata(parsed);
+  } catch {
+    return { ...SCENE_DEFAULTS };
   }
 }
 
@@ -1136,6 +1393,21 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
     Promise.all(visualJobs),
   ]);
 
+  // ---- 5a. scene-metadata vision pass (RE-ENABLED v43) -----------------
+  // Previously disabled in v42 after a render stalled at >17min. Post-mortem
+  // showed the new heavier Remotion composition (StageLight + glass caption
+  // + bigger countdown w/ pulse + lower-third) takes ~22min consistently, so
+  // the "stall" was actually just slow render — the vision pass was almost
+  // certainly innocent. Re-enabling with belt-and-suspenders normalisation
+  // applied AGAIN below at the BuiltSegment mapping site so even if the
+  // analyzer returns something past the first normaliser, Remotion still
+  // gets only known-safe enum / hex values.
+  const visionResults = await Promise.all(
+    visualUrls.map((url) =>
+      segmentImageLimiter(() => analyzeSceneMetadata(url, geminiKey))
+    ),
+  );
+
   // The "host_voice_url" prop on the Remotion composition is now unused
   // when per-segment audio is set — each Scene plays its own MP3. We still
   // pass the first segment's URL so the prop has a non-empty value (it
@@ -1155,6 +1427,19 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
     const kenBurns = i % 2 === 0
       ? { from: 1.0, to: 1.14 }
       : { from: 1.12, to: 1.0 };
+    // Belt + suspenders: even though analyzeSceneMetadata already normalises
+    // via normalizeSceneMetadata, re-validate here at the Remotion handoff
+    // site. If anything is past the enum / hex regex, fall back to defaults
+    // for THAT field rather than poisoning the Remotion zod parse.
+    const sceneRaw = visionResults[i] ?? SCENE_DEFAULTS;
+    const densityOk = sceneRaw.scene_density === "close" ||
+                      sceneRaw.scene_density === "mid" ||
+                      sceneRaw.scene_density === "wide";
+    const anchorOk = sceneRaw.subject_anchor === "left" ||
+                     sceneRaw.subject_anchor === "center" ||
+                     sceneRaw.subject_anchor === "right";
+    const hexOk = typeof sceneRaw.ambient_hex === "string" &&
+                  /^#[0-9a-fA-F]{6}$/.test(sceneRaw.ambient_hex);
     return {
       // Remotion's text_ar field is the ON-SCREEN OVERLAY (not narration).
       text_ar: seg.caption || seg.text || " ",
@@ -1163,6 +1448,9 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
       duration_ms: durationMs,
       ken_burns: kenBurns,
       pharaoh_pose: seg.pharaohPose,
+      scene_density: densityOk ? sceneRaw.scene_density : SCENE_DEFAULTS.scene_density,
+      subject_anchor: anchorOk ? sceneRaw.subject_anchor : SCENE_DEFAULTS.subject_anchor,
+      ambient_hex: hexOk ? sceneRaw.ambient_hex : SCENE_DEFAULTS.ambient_hex,
     };
   });
 

@@ -230,7 +230,9 @@ The voice runs through ElevenLabs eleven_multilingual_v2. Two mechanical rules m
 == STORY-THREAD TAGGING (REQUIRED OUTPUT) ==
 Every brief MUST attach to 1-3 short-slug thread IDs that describe the storylines this roundup covers (\`thread_ids\`). Either REUSE an existing slug from the RECENT STORY THREADS section (if you are continuing/advancing it), or INVENT a new one for a fresh storyline. Format: kebab-case-with-context, e.g. \`messi-injury-pre-wc26\`, \`morocco-regragui-final-call\`, \`usmnt-pochettino-squad-reveal\`, \`salah-captaincy-debate\`. Keep slugs STABLE across days — if you write about the Salah captaincy debate tomorrow, reuse \`salah-captaincy-debate\`; do NOT mint a near-duplicate like \`salah-captain-talk\`. Pick the slug that best describes the THROUGH-LINE of the story, not today's specific micro-beat.
 
-Alongside \`thread_ids\`, return \`thread_updates\`: a map keyed by thread_id, where each value is \`{ label: <human-readable English title for the thread, e.g. "Messi injury pre-WC26">, latest_summary: <one short English sentence describing what is genuinely NEW in this roundup about that thread, e.g. "Scaloni confirms Messi will undergo MRI on Tuesday; status uncertain"> }\`. The label is what shows up in our editorial dashboard; the latest_summary is what the NEXT roundup will see as context for that thread, so it must be specific and factual — not "Messi still injured", but "MRI scheduled for Tuesday, Scaloni non-committal". Include an entry in \`thread_updates\` for EVERY id in \`thread_ids\` (both existing and newly-minted slugs).
+Alongside \`thread_ids\`, return \`thread_updates\` — an ARRAY of objects, one per thread, each with this exact shape:
+\`{ "thread_id": "<slug, matching one of your thread_ids>", "label": "<human-readable English title, e.g. Messi injury pre-WC26>", "latest_summary": "<one short English sentence describing what is genuinely NEW in this roundup about that thread, e.g. Scaloni confirms Messi will undergo MRI on Tuesday; status uncertain>" }\`.
+The label is what shows up in our editorial dashboard; the latest_summary is what the NEXT roundup will see as context for that thread, so it must be specific and factual — not "Messi still injured", but "MRI scheduled for Tuesday, Scaloni non-committal". Include one array entry for EVERY id in \`thread_ids\` (both existing and newly-minted slugs).
 
 == ON-SCREEN CAPTION vs NARRATION (NEW — IMPORTANT) ==
 Every segment now has TWO Arabic texts. They are NOT the same.
@@ -299,32 +301,40 @@ Return JSON only, matching the provided schema:
 - script_segments: 5-7 objects {text, image_prompt_or_url, duration_ms}; one per story; duration_ms between 6000 and 12000; text is the colloquial Egyptian Arabic line.
 - brief: {summary_en, virality_score (lead story, 0-100), source_ids (every contributing raw_sources id, across all stories), verification ("verified" | "partial" | "unverified"), stories (one short English line per story, in air order), cta (the closing Arabic question)}.
 - thread_ids: 1-3 kebab-case slugs naming the storylines this roundup covers (see STORY-THREAD TAGGING above).
-- thread_updates: object keyed by each thread_id → { label, latest_summary } (see STORY-THREAD TAGGING above).`;
+- thread_updates: ARRAY of { thread_id, label, latest_summary } objects, one per thread_id (see STORY-THREAD TAGGING above).`;
 
 // ---- structured-output JSON schema -------------------------
 const ROUNDUP_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["hook", "urgency", "script_segments", "brief", "thread_ids", "thread_updates"],
+  // thread_ids / thread_updates kept OPTIONAL. v24 had them required which
+  // caused Anthropic strict-mode 400s when the structured-output engine
+  // didn't comply. Optional means the brain CAN return them (and should,
+  // per the prompt) but the deploy doesn't 500 if it doesn't.
+  required: ["hook", "urgency", "script_segments", "brief"],
   properties: {
     hook: { type: "string" },
     urgency: { type: "integer" },
     thread_ids: {
       type: "array",
-      minItems: 1,
+      minItems: 0,
       maxItems: 3,
       items: { type: "string" },
     },
+    // Array of strict-shape objects (NOT a map). v24's map shape used
+    // `additionalProperties: { type: "object", ... }` which Anthropic
+    // strict mode rejects — strict requires every property explicitly
+    // named. Array-of-objects with all fields required works fine.
     thread_updates: {
-      // map keyed by thread_id → { label, latest_summary }
-      // JSON Schema can't express "required keys come from another field",
-      // so we accept any string key and require label+latest_summary on each value.
-      type: "object",
-      additionalProperties: {
+      type: "array",
+      minItems: 0,
+      maxItems: 3,
+      items: {
         type: "object",
         additionalProperties: false,
-        required: ["label", "latest_summary"],
+        required: ["thread_id", "label", "latest_summary"],
         properties: {
+          thread_id: { type: "string" },
           label: { type: "string" },
           latest_summary: { type: "string" },
         },
@@ -690,9 +700,21 @@ Deno.serve(async (req: Request) => {
         .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
         .map((id) => id.trim().toLowerCase())
         .slice(0, 3);
-      const updatesMap = (roundup.thread_updates && typeof roundup.thread_updates === "object" && !Array.isArray(roundup.thread_updates))
-        ? roundup.thread_updates as Record<string, { label?: unknown; latest_summary?: unknown }>
-        : {};
+      // v26: thread_updates is now an ARRAY of {thread_id, label, latest_summary}
+      // (was a map in v24, which Anthropic strict-mode rejected). Convert to an
+      // internal map keyed by lower-cased thread_id so the per-thread lookup at
+      // line ~720 stays unchanged.
+      const updatesArr = Array.isArray(roundup.thread_updates)
+        ? roundup.thread_updates
+        : [];
+      const updatesMap: Record<string, { label?: unknown; latest_summary?: unknown }> = {};
+      for (const entry of updatesArr) {
+        if (!entry || typeof entry !== "object") continue;
+        const e = entry as { thread_id?: unknown; label?: unknown; latest_summary?: unknown };
+        const tid = typeof e.thread_id === "string" ? e.thread_id.trim().toLowerCase() : "";
+        if (!tid) continue;
+        updatesMap[tid] = { label: e.label, latest_summary: e.latest_summary };
+      }
 
       // Humanise a slug for fallback labels: "messi-injury-pre-wc26" -> "Messi Injury Pre Wc26"
       const humaniseSlug = (slug: string) =>
