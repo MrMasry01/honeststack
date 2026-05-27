@@ -124,6 +124,14 @@ function buildCaption(idea: Idea | null, asset: Asset): string {
 }
 
 // Step 1: create the container.
+//
+// thumb_offset (May 2026): skip the 3-second intro card and pick a frame
+// from segment 1 as the IG feed thumbnail. Without this IG defaults to
+// frame 0 = our brand intro splash, which makes every reel cover look
+// identical in-feed → kills click-through. 4000ms = 1 second into segment
+// 1, after the Pharaoh has entered and the key visual is settled.
+const IG_THUMB_OFFSET_MS = "4000";
+
 async function createReelContainer(
   igUserId: string,
   graphToken: string,
@@ -134,6 +142,7 @@ async function createReelContainer(
     media_type: "REELS",
     video_url: videoUrl,
     caption,
+    thumb_offset: IG_THUMB_OFFSET_MS,
     access_token: graphToken,
   });
   const res = await fetch(`${GRAPH_BASE}/${igUserId}/media`, {
