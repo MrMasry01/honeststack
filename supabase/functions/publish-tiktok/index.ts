@@ -105,17 +105,30 @@ async function refreshAccessToken(
   };
 }
 
-// TikTok's algo gives diminishing returns past ~5–7 hashtags per caption and
-// rewards relevance over volume. We curate the top 5 from the Core 10 +
-// TikTok-native discovery tags. #fyp and #كورة are TikTok-specific surfaces
-// that don't help on YouTube.
-const TIKTOK_TOP_HASHTAGS = [
+// Hashtag selection — priority-ordered, with hard guarantees.
+//
+// Previously this was a flat TIKTOK_TOP_HASHTAGS list dedup-merged with
+// the asset's Core 10 then sliced to 7, which insertion-order-bias dropped
+// BOTH #fyp (TT-native discovery, biggest algo signal) AND #HonestStack
+// (brand return-viewer signal) because they sat at the tail. Fixed by
+// splitting into MUST_INCLUDE (always survives the cap) + DISCOVERY (top
+// up to the cap). Bumped cap from 7 → 10 — TikTok's "5-7" is a soft
+// guideline, not a hard wall, and three guaranteed slots already eat 30%.
+const TIKTOK_MUST_INCLUDE = [
+  "fyp",          // TT-native discovery surface — non-negotiable
+  "كورة",          // Arabic TT-native discovery
+  "HonestStack",  // Brand — return-viewer signal
+];
+const TIKTOK_DISCOVERY = [
   "WorldCup2026",
   "كأس_العالم",
+  "FIFAWorldCup",
   "كرة_القدم",
-  "fyp",
-  "كورة",
+  "الفراعنة",
+  "Football",
+  "Soccer",
 ];
+const TIKTOK_TAG_CAP = 10;
 
 // TikTok caption (title) hard cap. The API accepts more in some endpoints
 // but the inbox/init flow truncates anything over 2200 chars; we stay well
@@ -144,8 +157,14 @@ function pickCta(assetId: string): string {
 function buildTitle(idea: Idea | null, asset: Asset): string {
   const raw = idea?.hook ?? asset.caption ?? "أخبار كأس العالم 2026";
   const baseTags = Array.isArray(asset.hashtags) ? asset.hashtags : [];
-  const merged = Array.from(new Set([...baseTags, ...TIKTOK_TOP_HASHTAGS]))
-    .slice(0, 7);
+  // Order: MUST_INCLUDE first (guaranteed slots), then platform DISCOVERY,
+  // then the asset's own Core 10 tags. dedup preserves first-occurrence
+  // position, so fyp/كورة/HonestStack are always in the first 3.
+  const merged = Array.from(new Set([
+    ...TIKTOK_MUST_INCLUDE,
+    ...TIKTOK_DISCOVERY,
+    ...baseTags,
+  ])).slice(0, TIKTOK_TAG_CAP);
   const cta = pickCta(asset.id);
   const ctaBlock = `\n\n${cta}`;
   const tagBlock = "\n\n" + merged.map((t) => `#${t.replace(/^#/, "")}`).join(" ");

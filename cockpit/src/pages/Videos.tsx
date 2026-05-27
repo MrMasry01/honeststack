@@ -609,6 +609,12 @@ function DoneCard({
             disabledHint={!tiktokConnected ? 'Connect TikTok in Connections tab' : undefined}
             onPublish={() => publish('tiktok')}
           />
+          {/* Copy TikTok caption — the inbox/draft flow often shows
+              the caption field blank in the TikTok app even when we
+              send a title. This button gives the exact caption we
+              would have sent so the user can paste it manually
+              before tapping Post in the app. */}
+          <CopyTikTokCaptionButton idea={idea} asset={asset} />
           {/* Instagram — connected server-side via Graph API token,
               same pattern as YouTube. No per-user OAuth gate. */}
           <PublishRow
@@ -628,6 +634,100 @@ function DoneCard({
         </div>
       </div>
     </Card>
+  )
+}
+
+// ── TikTok caption builder ─────────────────────────────────────────────
+// Mirrors the buildTitle() logic in supabase/functions/publish-tiktok so
+// the cockpit shows the EXACT same caption we send to TikTok's inbox.
+// Reason this exists: TikTok's inbox/draft flow frequently shows the
+// caption field blank in the app even when a title was POSTed — the
+// user has to paste the caption manually before tapping Post. This
+// gives them a one-tap copy.
+const TT_MUST_INCLUDE = ['fyp', 'كورة', 'HonestStack']
+const TT_DISCOVERY = [
+  'WorldCup2026', 'كأس_العالم', 'FIFAWorldCup', 'كرة_القدم',
+  'الفراعنة', 'Football', 'Soccer',
+]
+const TT_TAG_CAP = 10
+const TT_CTA_TAILS = [
+  '💬 رأيك تحت — مين شَدَّك أكتر؟',
+  '💾 احفظها للماتش، وكَمَّل معايا.',
+  '🇪🇬 تابعني — أنا بَنَزَّل ٤ مَرّات في اليوم.',
+  '🔁 ابعتها للي نام النَّهارده الصبح.',
+]
+const TT_CAPTION_CAP = 2000
+
+function pickCtaForAsset(assetId: string): string {
+  let sum = 0
+  for (let i = 0; i < assetId.length; i++) sum = (sum + assetId.charCodeAt(i)) | 0
+  return TT_CTA_TAILS[Math.abs(sum) % TT_CTA_TAILS.length]
+}
+
+function buildTikTokCaption(idea: IdeaRef | null, asset: Asset): string {
+  const raw = idea?.hook ?? asset.caption ?? 'أخبار كأس العالم 2026'
+  const baseTags = Array.isArray(asset.hashtags) ? asset.hashtags : []
+  // Same priority order as publish-tiktok edge fn:
+  //   MUST_INCLUDE (fyp / كورة / HonestStack) → DISCOVERY → base Core 10
+  // dedup preserves first-occurrence position, slice to cap.
+  const merged = Array.from(new Set([
+    ...TT_MUST_INCLUDE,
+    ...TT_DISCOVERY,
+    ...baseTags,
+  ])).slice(0, TT_TAG_CAP)
+  const cta = pickCtaForAsset(asset.id)
+  const ctaBlock = `\n\n${cta}`
+  const tagBlock = '\n\n' + merged.map(t => `#${t.replace(/^#/, '')}`).join(' ')
+  const overhead = ctaBlock.length + tagBlock.length
+  const maxHookLen = TT_CAPTION_CAP - overhead
+  const hook = raw.length > maxHookLen ? raw.slice(0, maxHookLen - 3) + '...' : raw
+  return `${hook}${ctaBlock}${tagBlock}`
+}
+
+function CopyTikTokCaptionButton({
+  idea,
+  asset,
+}: {
+  idea: IdeaRef | null
+  asset: Asset
+}) {
+  const [copied, setCopied] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function handleCopy() {
+    setError(null)
+    try {
+      const caption = buildTikTokCaption(idea, asset)
+      await navigator.clipboard.writeText(caption)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2200)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'copy failed')
+    }
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      style={{
+        background: 'transparent',
+        border: `1px solid ${C.navyBorder}`,
+        borderRadius: 6,
+        padding: '6px 10px',
+        fontSize: 11,
+        color: copied ? C.green : C.slate,
+        cursor: 'pointer',
+        textAlign: 'left',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        marginLeft: 30, // align with platform-icon-indented PublishRow content
+      }}
+      title="Copy the exact TikTok caption to paste manually in the TikTok app"
+    >
+      {copied ? '✓ Copied — paste in TikTok app' : '📋 Copy TikTok caption'}
+      {error && <span style={{ color: C.red, fontSize: 10 }}>· {error}</span>}
+    </button>
   )
 }
 
