@@ -5,6 +5,7 @@ import {
   interpolate,
   spring,
   Img,
+  OffthreadVideo,
   staticFile,
   continueRender,
   delayRender,
@@ -48,6 +49,11 @@ export type SubjectAnchor = "left" | "center" | "right";
 
 interface PosePreset {
   src: string | null;
+  /** Optional pre-keyed WebM with alpha (Higgsfield image-to-video → ffmpeg
+   *  chromakey). When set, takes priority over `src` — Pharaoh plays as a
+   *  looped transparent video instead of a static PNG. WhiteKeyImage is
+   *  skipped because the WebM already has transparency baked in. */
+  videoSrc?: string;
   anchor: "glide" | "bottom-left" | "bottom-center" | "bottom-right" |
     "edge-left" | "edge-right";
   animation: "glide" | "slide-from-left" | "slide-from-right" |
@@ -60,7 +66,7 @@ interface PosePreset {
 }
 
 const POSE_PRESETS: Record<PharaohPose, PosePreset> = {
-  "idle-talk":       { src: null,                                 anchor: "glide",         animation: "glide",            scaleMul: 1.0,  facing: null, reactive: false },
+  "idle-talk":       { src: null, videoSrc: staticFile("poses/idle-talk.webm"), anchor: "glide",         animation: "glide",            scaleMul: 1.0,  facing: null, reactive: false },
   "peek-left":       { src: staticFile("poses/peek-left.png"),    anchor: "edge-left",     animation: "slide-from-left",  scaleMul: 1.15, facing: 1,    reactive: true  },
   "peek-right":      { src: staticFile("poses/peek-right.png"),   anchor: "edge-right",    animation: "slide-from-right", scaleMul: 1.15, facing: -1,   reactive: true  },
   "point-up-right":  { src: staticFile("poses/point-up-right.png"),anchor: "bottom-right", animation: "fade-in",          scaleMul: 1.05, facing: null, reactive: true  },
@@ -71,7 +77,7 @@ const POSE_PRESETS: Record<PharaohPose, PosePreset> = {
   "walk-in-left":    { src: staticFile("poses/walk-in-left.png"), anchor: "bottom-left",   animation: "walk-from-left",   scaleMul: 1.0,  facing: null, reactive: false },
   "walk-out-right":  { src: staticFile("poses/walk-out-right.png"),anchor: "bottom-right", animation: "walk-out-right",   scaleMul: 1.0,  facing: null, reactive: false },
   "crying":          { src: staticFile("poses/crying.png"),       anchor: "bottom-center", animation: "fade-in",          scaleMul: 1.1,  facing: null, reactive: false },
-  "celebrating":     { src: staticFile("poses/celebrating.png"),  anchor: "bottom-center", animation: "scale-pop",        scaleMul: 1.2,  facing: null, reactive: false },
+  "celebrating":     { src: staticFile("poses/celebrating.png"),  videoSrc: staticFile("poses/celebrating.webm"), anchor: "bottom-center", animation: "scale-pop",        scaleMul: 1.2,  facing: null, reactive: false },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -284,8 +290,9 @@ export const Host: React.FC<HostProps> = ({
   // Fallback ambient — brand primary will be a dark hex in most cases.
   const ambient = sceneAmbientHex ?? "#0A0A0A";
 
-  // Idle-talk uses the two-frame mouth-swap system. All other poses use a
-  // single pose PNG (no mouth swap — the expression is baked in).
+  // Idle-talk uses the two-frame mouth-swap system (or a looped WebM if one
+  // has been baked via Higgsfield image-to-video). All other poses use a
+  // single pose PNG / WebM (no mouth swap — the expression is baked in).
   if (!preset.src) {
     return (
       <IdleTalkHost
@@ -299,6 +306,7 @@ export const Host: React.FC<HostProps> = ({
         sceneDensity={sceneDensity}
         subjectAnchor={subjectAnchor}
         ambient={ambient}
+        videoSrc={preset.videoSrc}
       />
     );
   }
@@ -306,7 +314,14 @@ export const Host: React.FC<HostProps> = ({
   // ── POSE MODE ───────────────────────────────────────────────────────────
   const densityMul = densityScale(sceneDensity);
   const CAPTION_RESERVED = Math.round(height * 0.165);
-  const CHAR_HEIGHT = Math.round(height * 0.22 * preset.scaleMul * densityMul);
+  // Base 0.26 (was 0.22) — gives Pharaoh more visual weight without
+  // crowding the subject. With opposite-side anchor + density multiplier,
+  // peak coverage is ~38% on close-ups (down from 32% before), ~29% on
+  // mid scenes (was 25%), ~26% on wide (was 22%). ParallaxBackdrop's
+  // densityHeightFactor was trimmed in lockstep so the photo area + this
+  // Pharaoh height never sum to more than ~104% (small overlap on opposite-
+  // side edge is fine since the photo subject is centered or biased away).
+  const CHAR_HEIGHT = Math.round(height * 0.26 * preset.scaleMul * densityMul);
   const CHAR_WIDTH = Math.round(CHAR_HEIGHT * 0.62);
 
   // Resolve anchor collision with subject.
@@ -494,17 +509,36 @@ export const Host: React.FC<HostProps> = ({
           filter: shadowFilter,
         }}
       >
-        <WhiteKeyImage
-          src={preset.src}
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            objectFit: "contain",
-            objectPosition: "bottom center",
-          }}
-        />
+        {preset.videoSrc ? (
+          // Pre-keyed WebM with alpha — skip WhiteKeyImage (already transparent).
+          // muted because pose clips are decorative; the only audio is the
+          // narrator's TTS playing in the parent composition.
+          <OffthreadVideo
+            src={preset.videoSrc}
+            loop
+            muted
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              objectPosition: "bottom center",
+            }}
+          />
+        ) : (
+          <WhiteKeyImage
+            src={preset.src!}
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              objectPosition: "bottom center",
+            }}
+          />
+        )}
       </div>
     </div>
   );
@@ -525,6 +559,11 @@ interface IdleTalkHostProps {
   sceneDensity: SceneDensity;
   subjectAnchor: SubjectAnchor;
   ambient: string;
+  /** When set, replaces the two-frame mouth-swap with a looped pre-keyed
+   *  WebM (Higgsfield image-to-video). Mouth-open/closed swap is skipped —
+   *  the WebM's natural motion stands in for it. Audio-driven body bob is
+   *  also disabled because the WebM already has subtle in-baked motion. */
+  videoSrc?: string;
 }
 
 const IdleTalkHost: React.FC<IdleTalkHostProps> = ({
@@ -538,6 +577,7 @@ const IdleTalkHost: React.FC<IdleTalkHostProps> = ({
   sceneDensity,
   subjectAnchor,
   ambient,
+  videoSrc,
 }) => {
   const absoluteFrame = frame + audioFrameOffset;
   const audioData = useAudioData(voiceUrl);
@@ -558,7 +598,7 @@ const IdleTalkHost: React.FC<IdleTalkHostProps> = ({
   // the talking head into a sticker.
   const densityMul = densityScale(sceneDensity);
   const CAPTION_RESERVED = Math.round(height * 0.165);
-  const CHAR_HEIGHT = Math.round(height * 0.22 * densityMul);
+  const CHAR_HEIGHT = Math.round(height * 0.26 * densityMul);
   const CHAR_WIDTH = Math.round(CHAR_HEIGHT * 0.62);
 
   const SIDE_MARGIN = 40;
@@ -603,8 +643,9 @@ const IdleTalkHost: React.FC<IdleTalkHostProps> = ({
   });
 
   // Audio-energy bob — allowed here because lip-sync silhouette is meant to
-  // pulse with speech. Pose mode intentionally skips this.
-  const speechBob = -Math.min(speechEnergy, 0.6) * 6;
+  // pulse with speech. Pose mode intentionally skips this. ALSO skipped when
+  // videoSrc is set — the baked-in WebM motion would compound and feel jittery.
+  const speechBob = videoSrc ? 0 : -Math.min(speechEnergy, 0.6) * 6;
   const mouthOpen = speechEnergy >= 0.13;
 
   // Micro-blink — same 140-frame cadence as pose mode.
@@ -668,14 +709,27 @@ const IdleTalkHost: React.FC<IdleTalkHostProps> = ({
           filter: shadowFilter,
         }}
       >
-        <WhiteKeyImage
-          src={PHARAOH_CLOSED}
-          style={{ ...frameImgStyle, opacity: mouthOpen ? 0 : 1 }}
-        />
-        <WhiteKeyImage
-          src={PHARAOH_OPEN}
-          style={{ ...frameImgStyle, opacity: mouthOpen ? 1 : 0 }}
-        />
+        {videoSrc ? (
+          // Looped pre-keyed WebM with alpha — the natural in-baked motion
+          // (breath, head tilt, blinks) replaces the binary mouth-swap.
+          <OffthreadVideo
+            src={videoSrc}
+            loop
+            muted
+            style={frameImgStyle}
+          />
+        ) : (
+          <>
+            <WhiteKeyImage
+              src={PHARAOH_CLOSED}
+              style={{ ...frameImgStyle, opacity: mouthOpen ? 0 : 1 }}
+            />
+            <WhiteKeyImage
+              src={PHARAOH_OPEN}
+              style={{ ...frameImgStyle, opacity: mouthOpen ? 1 : 0 }}
+            />
+          </>
+        )}
       </div>
     </div>
   );

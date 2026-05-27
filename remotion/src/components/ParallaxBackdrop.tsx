@@ -169,10 +169,15 @@ export const ParallaxBackdrop: React.FC<ParallaxBackdropProps> = ({
   //              expand the band to nearly full height (0.88) AND switch
   //              to objectFit:cover so the photo fills the area, accepting
   //              a small horizontal crop. Wide shots have content to spare.
+  // Trimmed (May 2026) from {close:0.78, mid:0.74, wide:0.88} to give the
+  // Pharaoh more vertical room — Host's CHAR_HEIGHT bumped from 0.22→0.26
+  // baseline in the same commit, and the two need to add to ~1.0 (slight
+  // overlap on the opposite-side edge is fine). Wide stays largest since
+  // those scenes use cover mode and the Pharaoh anchor is side, not center.
   const densityHeightFactor =
-    sceneDensity === "close" ? 0.78 :
-    sceneDensity === "wide"  ? 0.88 :
-                               0.74;
+    sceneDensity === "close" ? 0.68 :
+    sceneDensity === "wide"  ? 0.82 :
+                               0.70;
   const subjectFitMode: "contain" | "cover" =
     sceneDensity === "wide" ? "cover" : "contain";
   const subjectMaxHeight = upperBias
