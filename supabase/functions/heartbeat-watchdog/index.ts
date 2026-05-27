@@ -173,6 +173,81 @@ Deno.serve(async (req: Request) => {
       message: `${recentPostCount ?? 0} posts published in last 24h. If 0, the auto-scheduler isn't firing OR no fresh ideas exist OR all publishes are failing.`,
     });
 
+    // ── 7. IG Graph token expiry (catches the 13h silent outage class) ──
+    // Meta long-lived user tokens expire after 60 days. If we don't refresh
+    // before expiry, every IG publish silently 401s and the heartbeat
+    // doesn't notice because no posts have errored yet — they just stop
+    // happening. We poll /debug_token weekly via this watchdog and surface
+    // days-until-expiry. Threshold of >=7 days = green; <7 = red.
+    //
+    // TikTok + YouTube tokens have refresh-token flows and renew themselves
+    // automatically inside their respective publish functions, so they
+    // don't need this check (yet — could add later for the refresh-failed
+    // edge case).
+    const igToken = Deno.env.get("IG_GRAPH_TOKEN");
+    const igAppId = Deno.env.get("IG_APP_ID");
+    const igAppSecret = Deno.env.get("IG_APP_SECRET");
+    if (igToken && igAppId && igAppSecret) {
+      try {
+        const appToken = `${igAppId}|${igAppSecret}`;
+        const debugRes = await fetch(
+          `https://graph.facebook.com/v21.0/debug_token?input_token=${
+            encodeURIComponent(igToken)
+          }&access_token=${encodeURIComponent(appToken)}`,
+          { signal: AbortSignal.timeout(15_000) },
+        );
+        const debugJson = await debugRes.json();
+        // expires_at: unix seconds. 0 = never expires (rare for user tokens).
+        const expiresAt: number = debugJson?.data?.expires_at ?? 0;
+        const valid: boolean = debugJson?.data?.is_valid === true;
+        if (!valid) {
+          checks.push({
+            name: "ig_token_fresh",
+            ok: false,
+            value: "invalid",
+            threshold: "valid + >=7 days",
+            message: `IG token is INVALID per /debug_token. Posts will 401. Refresh now via https://developers.facebook.com/tools/debug/accesstoken/`,
+          });
+        } else if (expiresAt === 0) {
+          // Never-expiring page token — happy path
+          checks.push({
+            name: "ig_token_fresh",
+            ok: true,
+            value: "never_expires",
+            threshold: "valid + >=7 days",
+            message: `IG token is valid and never expires.`,
+          });
+        } else {
+          const daysRemaining = Math.round(
+            (expiresAt * 1000 - Date.now()) / (24 * 60 * 60 * 1000),
+          );
+          checks.push({
+            name: "ig_token_fresh",
+            ok: daysRemaining >= 7,
+            value: daysRemaining,
+            threshold: ">=7 days",
+            message: `IG token expires in ${daysRemaining} days. ${
+              daysRemaining < 7
+                ? "REFRESH NOW via https://developers.facebook.com/tools/debug/accesstoken/ — past expiry every IG publish 401s silently."
+                : "Healthy."
+            }`,
+          });
+        }
+      } catch (err) {
+        // Network / parse error → flag as unknown, but not red (don't
+        // false-alarm if Meta /debug_token is briefly down).
+        checks.push({
+          name: "ig_token_fresh",
+          ok: true,
+          value: "check_failed",
+          threshold: ">=7 days",
+          message: `IG /debug_token probe failed (treated as healthy until next run): ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        });
+      }
+    }
+
     const issues = checks.filter((c) => !c.ok);
     const ok = issues.length === 0;
 

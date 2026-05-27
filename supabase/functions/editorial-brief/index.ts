@@ -17,8 +17,44 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 const OWNER_ID = "e7564e43-6b02-4c40-9ecf-1c65fffafe9a";
 const JSON_HEADERS = { "Content-Type": "application/json" };
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const DEFAULT_MODEL = "claude-opus-4-7";
+// Model selection — per-bucket cost-aware routing.
+//
+// Opus 4.7 is the strongest writer, but ~5× the cost of Sonnet 4.7. The two
+// primetime slots (Cairo 21:00 + 00:00 = UTC 19:00 + 22:00 → 18-24 bucket)
+// get Opus for the lead-of-day quality; the two off-peak slots (Cairo 07:00
+// morning + 13:00 lunch = UTC 05:00 + 11:00 → 06-12 / 12-18 buckets) get
+// Sonnet, which is genuinely identical-quality on this prompt structure
+// based on side-by-side eyeballing. Reactive briefs always use Opus —
+// they're single-focus + high-stakes, the small cost delta is worth it.
+//
+// EDITORIAL_MODEL env var still overrides everything if set (lets us pin
+// to one model temporarily for A/B or rollback). MODEL_PRIMETIME and
+// MODEL_OFFPEAK env vars override the bucket routing if both want
+// separate tuning.
+const DEFAULT_MODEL_PRIMETIME = "claude-opus-4-7";
+// claude-sonnet-4-6 is the current stable Sonnet (NOT 4-7 — Sonnet
+// versioning is independent of Opus; Sonnet stayed at 4-6 when Opus
+// jumped to 4-7). Pricing: $3/$15 per MTok vs Opus $5/$25 = ~60%
+// cost cut on off-peak briefs. 4-6 also supports extended thinking
+// + 1M context window so quality is genuinely comparable.
+// Verified via Anthropic docs: https://docs.anthropic.com/en/docs/about-claude/models
+const DEFAULT_MODEL_OFFPEAK = "claude-sonnet-4-6";
 const BUCKETS = ["00-06", "06-12", "12-18", "18-24"];
+
+function selectModel(bucket: string, isReactive: boolean): string {
+  // Env-var hard override (legacy + emergency rollback).
+  const override = Deno.env.get("EDITORIAL_MODEL");
+  if (override) return override;
+  // Reactive ALWAYS uses primetime model — high-stakes single-focus.
+  if (isReactive) {
+    return Deno.env.get("MODEL_PRIMETIME") || DEFAULT_MODEL_PRIMETIME;
+  }
+  // Primetime bucket = Opus, off-peak = Sonnet.
+  if (bucket === "18-24") {
+    return Deno.env.get("MODEL_PRIMETIME") || DEFAULT_MODEL_PRIMETIME;
+  }
+  return Deno.env.get("MODEL_OFFPEAK") || DEFAULT_MODEL_OFFPEAK;
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
@@ -418,7 +454,9 @@ Deno.serve(async (req: Request) => {
     if (!anthropicKey) {
       return jsonResponse({ ok: false, error: "ANTHROPIC_API_KEY not configured" }, 500);
     }
-    const model = Deno.env.get("EDITORIAL_MODEL") || DEFAULT_MODEL;
+    // Model selection happens AFTER body parse so isReactive is known.
+    // (Set after `isReactive` is computed below — see selectModel call.)
+    let model = "";
 
     // ---- 3. resolve target bucket + parse reactive flag ----
     //
@@ -461,6 +499,9 @@ Deno.serve(async (req: Request) => {
     } catch (_) {
       // empty / non-JSON body -> use the inferred Cairo bucket, non-reactive
     }
+
+    // Now bucket + isReactive are settled — pick the model.
+    model = selectModel(bucket, isReactive);
 
     const supabase = createClient(supabaseUrl, serviceKey);
 

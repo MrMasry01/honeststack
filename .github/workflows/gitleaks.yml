@@ -1,0 +1,45 @@
+# Gitleaks — secret scanner.
+#
+# Runs on every push and pull request against main. Catches accidental
+# commits of API keys, tokens, INGEST_SECRET, .env files, etc. before
+# they end up in the public repo's git history.
+#
+# The HonestStack repo is PUBLIC by design (no proprietary value in the
+# code itself, the moat is the operational pipeline + audience), so a
+# single secret commit = immediate rotation across every connected
+# vendor (Supabase, ElevenLabs, Anthropic, Gemini, Meta, TikTok, YT,
+# Higgsfield, Make). Catching it pre-merge is the single highest-
+# leverage security control.
+#
+# Gitleaks uses pattern-based detection (regex over commit diffs). It's
+# free, runs in <30s per push, zero ongoing infra. False positives on
+# code that looks key-shaped (UUIDs, base64 strings) can be silenced
+# via .gitleaks.toml allowlist if they appear.
+
+name: gitleaks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan for committed secrets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Need full history so gitleaks can scan past commits on PRs.
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          # No GITLEAKS_LICENSE needed for public repos.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
