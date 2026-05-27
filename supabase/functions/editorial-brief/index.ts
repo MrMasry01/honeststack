@@ -317,18 +317,19 @@ const ROUNDUP_SCHEMA = {
     urgency: { type: "integer" },
     thread_ids: {
       type: "array",
-      minItems: 0,
-      maxItems: 3,
+      // No minItems/maxItems — Anthropic strict-mode JSON-schema does
+      // NOT support those constraints on arrays. v27 had them and
+      // returned 400 on every Anthropic call. The 1-3 bound is enforced
+      // via the prompt instructions instead (STORY-THREAD TAGGING section).
       items: { type: "string" },
     },
     // Array of strict-shape objects (NOT a map). v24's map shape used
     // `additionalProperties: { type: "object", ... }` which Anthropic
     // strict mode rejects — strict requires every property explicitly
     // named. Array-of-objects with all fields required works fine.
+    // Same Anthropic-strict caveat as thread_ids: no minItems/maxItems.
     thread_updates: {
       type: "array",
-      minItems: 0,
-      maxItems: 3,
       items: {
         type: "object",
         additionalProperties: false,
@@ -419,86 +420,125 @@ Deno.serve(async (req: Request) => {
     }
     const model = Deno.env.get("EDITORIAL_MODEL") || DEFAULT_MODEL;
 
-    // ---- 3. resolve target bucket --------------------------
+    // ---- 3. resolve target bucket + parse reactive flag ----
+    //
+    // REACTIVE MODE (May 2026): a body of
+    //   { "reactive": true, "reactive_brief": { "headline": "<one-liner>",
+    //     "key_facts": ["..."] } }
+    // bypasses the cron rhythm entirely. Used when something specific just
+    // happened (Egypt match ended, Salah scored, a federation statement
+    // dropped) and we want a single-focus reactive video out within ~20min
+    // of the event — the algorithmic gold-rush window for sports content
+    // during major tournaments. Default body (empty / no reactive flag) =
+    // identical behaviour to the cron path.
     let bucket = cairoBucket();
+    let isReactive = false;
+    let reactiveHeadline = "";
+    let reactiveFacts: string[] = [];
     try {
       const body = await req.json();
       if (body && typeof body.bucket === "string" && BUCKETS.includes(body.bucket)) {
         bucket = body.bucket;
       }
+      if (body && body.reactive === true) {
+        const rb = body.reactive_brief;
+        if (rb && typeof rb === "object" && typeof rb.headline === "string" && rb.headline.trim().length > 0) {
+          isReactive = true;
+          reactiveHeadline = rb.headline.trim();
+          if (Array.isArray(rb.key_facts)) {
+            reactiveFacts = rb.key_facts
+              .filter((f: unknown): f is string => typeof f === "string" && f.trim().length > 0)
+              .map((f: string) => f.trim())
+              .slice(0, 10); // cap to prevent prompt bloat
+          }
+        } else {
+          return jsonResponse(
+            { ok: false, error: "reactive=true requires reactive_brief.headline (non-empty string)" },
+            400,
+          );
+        }
+      }
     } catch (_) {
-      // empty / non-JSON body -> use the inferred Cairo bucket
+      // empty / non-JSON body -> use the inferred Cairo bucket, non-reactive
     }
 
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    // ---- 4. double-run guard -------------------------------
-    const fiveHoursAgo = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString();
-    const { data: existing, error: guardErr } = await supabase
-      .from("content_ideas")
-      .select("id")
-      .eq("owner_id", OWNER_ID)
-      .eq("time_bucket", bucket)
-      .gte("created_at", fiveHoursAgo)
-      .limit(1);
-    if (guardErr) throw new Error(`guard query: ${guardErr.message}`);
-    if (existing && existing.length > 0) {
-      return jsonResponse({ ok: true, skipped: "already_done", bucket });
+    // ---- 4. double-run guard (SKIPPED in reactive mode) ---
+    // Reactive briefs always fire — the whole point is that something
+    // specific just happened and the algorithmic window is short.
+    if (!isReactive) {
+      const fiveHoursAgo = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString();
+      const { data: existing, error: guardErr } = await supabase
+        .from("content_ideas")
+        .select("id")
+        .eq("owner_id", OWNER_ID)
+        .eq("time_bucket", bucket)
+        .gte("created_at", fiveHoursAgo)
+        .limit(1);
+      if (guardErr) throw new Error(`guard query: ${guardErr.message}`);
+      if (existing && existing.length > 0) {
+        return jsonResponse({ ok: true, skipped: "already_done", bucket });
+      }
     }
 
-    // ---- 5a. pull the recent source window ------------------
-    // 8h window: the cron fires every 6h, so 8h covers any tick that
-    // missed by up to 2h while still keeping stories tight to "what
-    // just happened" — avoids dragging yesterday's news into every
-    // roundup.
-    const eightHoursAgo = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
-    const { data: rawSources, error: srcErr } = await supabase
-      .from("raw_sources")
-      .select("id, source_handle, author, content, media_urls, url, verified")
-      .eq("owner_id", OWNER_ID)
-      .gte("created_at", eightHoursAgo)
-      .order("created_at", { ascending: false })
-      .limit(200);
-    if (srcErr) throw new Error(`raw_sources query: ${srcErr.message}`);
-    if (!rawSources || rawSources.length === 0) {
-      return jsonResponse({ ok: true, skipped: "no_sources", bucket });
-    }
+    // ---- 5a + 5b. source pulls (SKIPPED in reactive mode) --
+    // In normal mode: pull last 8h of raw_sources, dedupe against ids
+    // already cited in prior 48h roundups, require ≥3 fresh sources.
+    // In reactive mode: the manual trigger IS the source, no scraping.
+    type SourceRow = {
+      id: string;
+      source_handle?: string;
+      author?: string;
+      content?: string;
+      media_urls?: unknown;
+      url?: string;
+      verified?: boolean;
+    };
+    let sources: SourceRow[] = [];
+    let validIds = new Set<string>();
+    if (!isReactive) {
+      const eightHoursAgo = new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString();
+      const { data: rawSources, error: srcErr } = await supabase
+        .from("raw_sources")
+        .select("id, source_handle, author, content, media_urls, url, verified")
+        .eq("owner_id", OWNER_ID)
+        .gte("created_at", eightHoursAgo)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (srcErr) throw new Error(`raw_sources query: ${srcErr.message}`);
+      if (!rawSources || rawSources.length === 0) {
+        return jsonResponse({ ok: true, skipped: "no_sources", bucket });
+      }
 
-    // ---- 5b. de-duplicate against recent roundups -----------
-    // Every content_idea records its source_ids in brief.source_ids.
-    // Pull every brief from the last 48h and collect a set of "burnt"
-    // ids; any source already used by a roundup is excluded here so
-    // we never write the same story twice. 48h is wide enough to
-    // catch the prior 4 roundups even if scheduling drifts.
-    const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-    const { data: priorIdeas, error: priorErr } = await supabase
-      .from("content_ideas")
-      .select("brief")
-      .eq("owner_id", OWNER_ID)
-      .gte("created_at", twoDaysAgo);
-    if (priorErr) throw new Error(`prior ideas query: ${priorErr.message}`);
+      const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      const { data: priorIdeas, error: priorErr } = await supabase
+        .from("content_ideas")
+        .select("brief")
+        .eq("owner_id", OWNER_ID)
+        .gte("created_at", twoDaysAgo);
+      if (priorErr) throw new Error(`prior ideas query: ${priorErr.message}`);
 
-    const usedIds = new Set<string>();
-    for (const row of priorIdeas ?? []) {
-      const brief = row.brief as { source_ids?: unknown } | null;
-      const ids = Array.isArray(brief?.source_ids) ? brief!.source_ids : [];
-      for (const id of ids) if (typeof id === "string") usedIds.add(id);
-    }
+      const usedIds = new Set<string>();
+      for (const row of priorIdeas ?? []) {
+        const brief = row.brief as { source_ids?: unknown } | null;
+        const ids = Array.isArray(brief?.source_ids) ? brief!.source_ids : [];
+        for (const id of ids) if (typeof id === "string") usedIds.add(id);
+      }
 
-    const sources = rawSources.filter(
-      (s: { id: string }) => !usedIds.has(s.id),
-    );
-    if (sources.length < 3) {
-      return jsonResponse({
-        ok: true,
-        skipped: "not_enough_fresh_sources",
-        bucket,
-        total_in_window: rawSources.length,
-        already_used: rawSources.length - sources.length,
-        fresh_remaining: sources.length,
-      });
+      sources = (rawSources as SourceRow[]).filter((s) => !usedIds.has(s.id));
+      if (sources.length < 3) {
+        return jsonResponse({
+          ok: true,
+          skipped: "not_enough_fresh_sources",
+          bucket,
+          total_in_window: rawSources.length,
+          already_used: rawSources.length - sources.length,
+          fresh_remaining: sources.length,
+        });
+      }
+      validIds = new Set(sources.map((s) => s.id));
     }
-    const validIds = new Set(sources.map((s: { id: string }) => s.id));
 
     // ---- 5c. pull active story threads from last 72h --------
     // The brain needs to know which storylines we've already been hammering
@@ -577,17 +617,42 @@ Deno.serve(async (req: Request) => {
       ),
     );
 
-    const userMessage =
-      `Today (Cairo): ${todayCairo}.\n` +
-      `World Cup 2026 kickoff: ${WC_KICKOFF_ISO} (Mexico City).\n` +
-      `Days remaining: ${daysToKickoff}.\n\n` +
-      `Time bucket: ${bucket}` +
-      (bucket === "18-24" ? " (primetime — lead with the single biggest story of the day)." : ".") +
-      `\n\n` +
-      threadsBlock +
-      `The scraped football news in the LAST 8 HOURS, pre-filtered to exclude anything already covered in a recent roundup (JSON). Reference each item's "id" in brief.source_ids:\n\n` +
-      JSON.stringify(sources) +
-      `\n\nProduce ONE roundup video for this window now. Anchor it to the ${daysToKickoff}-day countdown. Return only the structured JSON (including thread_ids and thread_updates).`;
+    const userMessage = isReactive
+      ? // ── REACTIVE MOMENT prompt ──
+        // Tight single-focus reactive video for a specific event the user
+        // just witnessed (match end, Salah goal, federation news). 4
+        // segments instead of 5-7, lead with the moment, urgent tone.
+        `Today (Cairo): ${todayCairo}.\n` +
+        `World Cup 2026 kickoff: ${WC_KICKOFF_ISO} (Mexico City).\n` +
+        `Days remaining: ${daysToKickoff}.\n\n` +
+        `== REACTIVE MOMENT ==\n` +
+        `Something specific just happened — the user fired this brief manually within minutes of the event. Produce a SINGLE-FOCUS reactive video, NOT a multi-story roundup:\n` +
+        `- 4 segments only (not 5-7)\n` +
+        `- ~30-40 seconds total runtime (~7-10s per segment)\n` +
+        `- Urgent, fresh-take tone. The Pharaoh saw this moments ago — give the immediate reaction Egypt is feeling RIGHT NOW.\n` +
+        `- Segment 1: lead with the moment itself, no warm-up, no countdown anchor lead.\n` +
+        `- Segment 2: immediate take / "what does this mean".\n` +
+        `- Segments 3-4: context, hot-take (with VILLAIN per Rule 13), or sticker-line close (per Rule 12).\n\n` +
+        `THE MOMENT:\n` +
+        `HEADLINE: ${reactiveHeadline}\n` +
+        (reactiveFacts.length > 0
+          ? `\nKEY FACTS:\n${reactiveFacts.map((f) => `- ${f}`).join("\n")}\n`
+          : "") +
+        `\n` +
+        threadsBlock +
+        `IMPORTANT: This is a manual reactive trigger — there are NO raw_sources to cite. Return brief.source_ids as an empty array []. All other brief fields normal.\n` +
+        `\nReturn only the structured JSON (including thread_ids and thread_updates — pick 1 thread that captures this moment).`
+      : // ── STANDARD ROUNDUP prompt ──
+        `Today (Cairo): ${todayCairo}.\n` +
+        `World Cup 2026 kickoff: ${WC_KICKOFF_ISO} (Mexico City).\n` +
+        `Days remaining: ${daysToKickoff}.\n\n` +
+        `Time bucket: ${bucket}` +
+        (bucket === "18-24" ? " (primetime — lead with the single biggest story of the day)." : ".") +
+        `\n\n` +
+        threadsBlock +
+        `The scraped football news in the LAST 8 HOURS, pre-filtered to exclude anything already covered in a recent roundup (JSON). Reference each item's "id" in brief.source_ids:\n\n` +
+        JSON.stringify(sources) +
+        `\n\nProduce ONE roundup video for this window now. Anchor it to the ${daysToKickoff}-day countdown. Return only the structured JSON (including thread_ids and thread_updates).`;
 
     const apiResp = await fetch(ANTHROPIC_URL, {
       method: "POST",
