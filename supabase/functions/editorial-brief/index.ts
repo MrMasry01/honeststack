@@ -32,13 +32,14 @@ const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 // MODEL_OFFPEAK env vars override the bucket routing if both want
 // separate tuning.
 const DEFAULT_MODEL_PRIMETIME = "claude-opus-4-7";
-// claude-sonnet-4-6 is the current stable Sonnet (NOT 4-7 — Sonnet
-// versioning is independent of Opus; Sonnet stayed at 4-6 when Opus
-// jumped to 4-7). Pricing: $3/$15 per MTok vs Opus $5/$25 = ~60%
-// cost cut on off-peak briefs. 4-6 also supports extended thinking
-// + 1M context window so quality is genuinely comparable.
-// Verified via Anthropic docs: https://docs.anthropic.com/en/docs/about-claude/models
-const DEFAULT_MODEL_OFFPEAK = "claude-sonnet-4-6";
+// REVERTED to Opus for off-peak too — user prefers quality over cost
+// ("we have plenty of token usage anyways"). Sonnet 4-6 was also tripping
+// the 150s Anthropic timeout with adaptive thinking, so the cost win
+// would have come with reliability risk.
+// selectModel + MODEL_OFFPEAK env var infrastructure stays in place so
+// re-enabling Sonnet later (with bumped timeout) is a one-line config
+// change — set MODEL_OFFPEAK=claude-sonnet-4-6 in Supabase secrets.
+const DEFAULT_MODEL_OFFPEAK = "claude-opus-4-7";
 const BUCKETS = ["00-06", "06-12", "12-18", "18-24"];
 
 function selectModel(bucket: string, isReactive: boolean): string {
