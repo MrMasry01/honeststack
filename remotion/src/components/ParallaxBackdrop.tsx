@@ -157,11 +157,24 @@ export const ParallaxBackdrop: React.FC<ParallaxBackdropProps> = ({
 
   // Subject layout: contain it within the upper region when a mascot
   // occupies the bottom band, otherwise contain it across the full frame.
-  // sceneDensity nudges the band height — close shots need a hair more
-  // room so faces don't get clipped by the mascot zone; wide shots
-  // surrender a hair more space to the ambient wash.
+  //
+  // sceneDensity drives BOTH the band height AND the fit mode:
+  //   • close  — faces fill the frame; give the subject more vertical room
+  //              (0.78) so chins aren't clipped. Fit=contain (keep full face).
+  //   • mid    — standard mix (0.74). Fit=contain.
+  //   • wide   — environmental shots (training pitch, stadium, group photos).
+  //              These are usually landscape source images that, when
+  //              contained inside a 9:16 frame, leave huge top/bottom voids
+  //              (the "black hole" bug from the Newcastle frame). Solution:
+  //              expand the band to nearly full height (0.88) AND switch
+  //              to objectFit:cover so the photo fills the area, accepting
+  //              a small horizontal crop. Wide shots have content to spare.
   const densityHeightFactor =
-    sceneDensity === "close" ? 0.74 : sceneDensity === "wide" ? 0.66 : 0.70;
+    sceneDensity === "close" ? 0.78 :
+    sceneDensity === "wide"  ? 0.88 :
+                               0.74;
+  const subjectFitMode: "contain" | "cover" =
+    sceneDensity === "wide" ? "cover" : "contain";
   const subjectMaxHeight = upperBias
     ? Math.round(height * densityHeightFactor)
     : height;
@@ -280,7 +293,10 @@ export const ParallaxBackdrop: React.FC<ParallaxBackdropProps> = ({
                 maxHeight: "100%",
                 width: "100%",
                 height: "100%",
-                objectFit: "contain",
+                // Density-aware fit: cover for wide shots (no void),
+                // contain for everything else (preserve full subject).
+                objectFit: subjectFitMode,
+                objectPosition: "center",
                 // Soft drop shadow grounds the image over the blurred fill
                 // without making it feel like a sticker.
                 filter: "drop-shadow(0 10px 30px rgba(0,0,0,0.55))",

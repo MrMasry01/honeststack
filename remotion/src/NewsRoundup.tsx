@@ -181,20 +181,19 @@ const Scene: React.FC<SceneProps> = ({
   const hasPerSegmentAudio = Boolean(segment.audio_url);
 
   // ── Shared scene-composition contract ────────────────────────────────────
-  // For v1 these are derived from existing schema fields. Once schema carries
-  // explicit density / subject_anchor / ambient_hex on the segment, switch to
-  // `segment.subject_anchor ?? 'center'` etc. — the rest of the pipeline below
-  // is already wired to consume the explicit values.
-  const sceneDensity: SceneDensity = deriveSceneDensity(segment);
+  // Render-shortform's per-segment Gemini Vision pass now populates these
+  // explicitly (scene_density / subject_anchor / ambient_hex on each
+  // segment). Prefer the vision result; fall back to the kenBurns heuristic
+  // for backwards compat with any in-flight ideas generated before vision
+  // was wired in.
+  const sceneDensity: SceneDensity =
+    (segment as unknown as { scene_density?: SceneDensity }).scene_density ??
+    deriveSceneDensity(segment);
 
-  // No schema field yet → default centered. Documented in integration notes.
   const subjectAnchor: SubjectAnchor =
     (segment as unknown as { subject_anchor?: SubjectAnchor }).subject_anchor ??
     "center";
 
-  // Placeholder dominant color. Ideally a Gemini I2I or vision pass extracts
-  // the dominant hex from segment.visual_url upstream; until then fall back
-  // to brand.primary so the gradient still feels on-brand.
   const sceneAmbientHex: string = isValidHex(
     (segment as unknown as { ambient_hex?: string }).ambient_hex,
   )
@@ -296,14 +295,27 @@ const Scene: React.FC<SceneProps> = ({
   );
 };
 
-// Countdown chip — "١٧ يوم على المونديال". Top-right corner. Hides when
-// the tournament has started.
+// Countdown chip — "١٠ يوم على المونديال". Top-right corner.
+//
+// The countdown IS the show's organising principle ("16 days to kickoff...
+// 15 days... 14..."), so the chip is sized like a TV ticker rather than
+// a footnote. Previous version at 26px/16px read as decorative metadata.
+// This version (~64px digit, gold accent, subtle pulse) reads as the brand
+// signature and gives viewers an immediate "how close are we" beat the
+// moment the video opens.
+//
+// Hides when the tournament has started — switches to a LIVE marker.
 const CountdownChip: React.FC<{
   brand: NewsRoundupProps["brand"];
   daysToWc?: number;
 }> = ({ brand, daysToWc }) => {
   const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
   const opacity = Math.min(frame / 15, 0.95);
+
+  // Slow breathing pulse on the digit — sin wave, ~3% scale at 0.5Hz.
+  // Keeps the chip feeling alive without becoming distracting.
+  const pulseScale = 1 + Math.sin((frame / fps) * Math.PI) * 0.025;
 
   if (!daysToWc || daysToWc <= 0) {
     // Tournament has started — show "LIVE" marker instead
@@ -311,35 +323,38 @@ const CountdownChip: React.FC<{
       <div
         style={{
           position: "absolute",
-          top: 60,
-          right: 40,
+          top: 56,
+          right: 36,
           opacity,
-          background: "rgba(0,0,0,0.55)",
-          border: `1.5px solid ${brand.accent}`,
+          background: "rgba(0,0,0,0.62)",
+          border: `2.5px solid #FF3B30`,
           borderRadius: 999,
-          padding: "8px 14px",
+          padding: "16px 26px",
           display: "flex",
           alignItems: "center",
-          gap: 8,
-          backdropFilter: "blur(6px)",
+          gap: 14,
+          backdropFilter: "blur(8px)",
+          boxShadow: `0 0 28px rgba(255, 59, 48, 0.45)`,
         }}
       >
         <div
           style={{
-            width: 8,
-            height: 8,
+            width: 16,
+            height: 16,
             borderRadius: "50%",
             background: "#FF3B30",
-            boxShadow: "0 0 8px #FF3B30",
+            boxShadow: "0 0 16px #FF3B30",
+            transform: `scale(${pulseScale})`,
           }}
         />
         <span
           style={{
             fontFamily: "Cairo, sans-serif",
-            fontWeight: 800,
-            fontSize: 20,
+            fontWeight: 900,
+            fontSize: 38,
             color: "#FFFFFF",
-            letterSpacing: 1.2,
+            letterSpacing: 2,
+            lineHeight: 1,
           }}
         >
           LIVE
@@ -356,27 +371,38 @@ const CountdownChip: React.FC<{
     <div
       style={{
         position: "absolute",
-        top: 60,
-        right: 40,
+        top: 56,
+        right: 36,
         opacity,
-        background: "rgba(0,0,0,0.55)",
-        border: `1.5px solid ${brand.accent}`,
+        background: "rgba(0,0,0,0.62)",
+        border: `2.5px solid ${brand.accent}`,
         borderRadius: 999,
-        padding: "8px 16px",
+        padding: "14px 28px",
         display: "flex",
         alignItems: "center",
-        gap: 10,
-        backdropFilter: "blur(6px)",
-        boxShadow: `0 0 16px rgba(0,0,0,0.5)`,
+        gap: 18,
+        backdropFilter: "blur(8px)",
+        boxShadow: `0 0 32px rgba(0,0,0,0.55), 0 0 24px ${brand.accent}55`,
       }}
     >
       <span
         style={{
           fontFamily: "Cairo, sans-serif",
           fontWeight: 900,
-          fontSize: 26,
+          fontSize: 64,
           color: brand.accent,
           lineHeight: 1,
+          // Drop shadow gives the digit weight against bright photo edges
+          textShadow: `0 2px 8px rgba(0,0,0,0.9), 0 0 18px ${brand.accent}88`,
+          // Subtle breathing pulse on the digit — sells the urgency
+          transform: `scale(${pulseScale})`,
+          transformOrigin: "center center",
+          display: "inline-block",
+          // Tabular-nums prevents the chip from twitching width on digit
+          // transitions (e.g. 10 → 9 going from 2 chars to 1).
+          fontVariantNumeric: "tabular-nums",
+          minWidth: "1.2em",
+          textAlign: "center",
         }}
       >
         {toArabicDigits(daysToWc)}
@@ -384,11 +410,12 @@ const CountdownChip: React.FC<{
       <span
         style={{
           fontFamily: "Cairo, sans-serif",
-          fontWeight: 700,
-          fontSize: 16,
+          fontWeight: 800,
+          fontSize: 26,
           color: "#FFFFFF",
-          lineHeight: 1,
+          lineHeight: 1.05,
           direction: "rtl",
+          textShadow: "0 2px 6px rgba(0,0,0,0.8)",
         }}
       >
         يوم على المونديال
@@ -411,11 +438,13 @@ const SegmentDots: React.FC<{
     <div
       style={{
         position: "absolute",
-        top: 112,
+        // Pushed down to clear the now-larger countdown chip above (chip
+        // grew from ~52px tall to ~92px tall after the ticker upgrade).
+        top: 170,
         right: 40,
         opacity,
         display: "flex",
-        gap: 6,
+        gap: 8,
         alignItems: "center",
       }}
     >
@@ -425,11 +454,11 @@ const SegmentDots: React.FC<{
           <div
             key={i}
             style={{
-              width: active ? 8 : 6,
-              height: active ? 8 : 6,
+              width: active ? 10 : 7,
+              height: active ? 10 : 7,
               borderRadius: "50%",
               background: active ? brand.accent : "rgba(255,255,255,0.45)",
-              boxShadow: active ? `0 0 6px ${brand.accent}` : "none",
+              boxShadow: active ? `0 0 8px ${brand.accent}` : "none",
               transition: "all 200ms",
             }}
           />
