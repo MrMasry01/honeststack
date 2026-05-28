@@ -706,18 +706,18 @@ Deno.serve(async (req: Request) => {
       body: JSON.stringify({
         model,
         max_tokens: 16000,
-        // v33 (May 2026): switched from `{type:"adaptive"}` to a fixed
-        // budget. Adaptive let Opus think for arbitrary tokens; combined
-        // with high-effort output_config it pushed the call past the
-        // Supabase 150s edge-function ceiling on two of three recent
-        // fires (22:00 UTC May 27 = 150.9s, 11:00 UTC May 28 = 153.7s).
-        // 6000 tokens of thinking is enough for our 12-bucket structured
-        // output (verified: v25 at 19:00 UTC May 27 finished in 150.2s
-        // with adaptive thinking that almost certainly used ≤6k anyway).
-        // Re-evaluate if quality drops on multi-source story threading.
-        thinking: { type: "enabled", budget_tokens: 6000 },
+        // claude-opus-4-7 does NOT accept `thinking.type:"enabled"` +
+        // budget_tokens — that older shape 400s with: "not supported for
+        // this model. Use thinking.type.adaptive and output_config.effort".
+        // The v33/v34 "fixed budget" change therefore broke EVERY fire.
+        // The model-correct way to bound thinking latency is the effort
+        // knob: adaptive thinking + effort "medium" keeps the call well
+        // under the 140s AbortSignal (high effort previously ran ~150-153s
+        // and tripped the Supabase 150s edge ceiling). Bump back to "high"
+        // only if the platform wall-clock limit is raised above 150s.
+        thinking: { type: "adaptive" },
         output_config: {
-          effort: "high",
+          effort: "medium",
           format: { type: "json_schema", schema: ROUNDUP_SCHEMA },
         },
         system: SYSTEM_PROMPT,
