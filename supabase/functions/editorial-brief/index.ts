@@ -706,7 +706,16 @@ Deno.serve(async (req: Request) => {
       body: JSON.stringify({
         model,
         max_tokens: 16000,
-        thinking: { type: "adaptive" },
+        // v33 (May 2026): switched from `{type:"adaptive"}` to a fixed
+        // budget. Adaptive let Opus think for arbitrary tokens; combined
+        // with high-effort output_config it pushed the call past the
+        // Supabase 150s edge-function ceiling on two of three recent
+        // fires (22:00 UTC May 27 = 150.9s, 11:00 UTC May 28 = 153.7s).
+        // 6000 tokens of thinking is enough for our 12-bucket structured
+        // output (verified: v25 at 19:00 UTC May 27 finished in 150.2s
+        // with adaptive thinking that almost certainly used ≤6k anyway).
+        // Re-evaluate if quality drops on multi-source story threading.
+        thinking: { type: "enabled", budget_tokens: 6000 },
         output_config: {
           effort: "high",
           format: { type: "json_schema", schema: ROUNDUP_SCHEMA },
@@ -714,7 +723,10 @@ Deno.serve(async (req: Request) => {
         system: SYSTEM_PROMPT,
         messages: [{ role: "user", content: userMessage }],
       }),
-      signal: AbortSignal.timeout(150_000),
+      // v33: tightened from 150_000 → 140_000 so we fail loudly INSIDE
+      // the function (with a catchable error) rather than getting
+      // 546-terminated by the Supabase platform. Gives 10s of margin.
+      signal: AbortSignal.timeout(140_000),
     });
 
     const apiJson = await apiResp.json();
