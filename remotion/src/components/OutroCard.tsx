@@ -13,6 +13,13 @@ import { loadFont } from "@remotion/google-fonts/Cairo";
 // over shoulder, waving goodbye). Reinforces the "see you next round"
 // cadence the CTA text promises ("تابعوني — أنا بَنزّل ٤ مرّات في اليوم").
 // Placed bottom-left so it doesn't crowd the centered handle + button.
+//
+// Source asset is pre-keyed (May 28 2026) — the original PNG had a
+// solid white background which showed through the dark outro gradient
+// as a visible white rectangle. ffmpeg `colorkey=0xFFFFFF:0.18:0.08`
+// was applied in-place to give the asset a proper alpha channel.
+// Host.tsx's runtime WhiteKey processing is a no-op on an already-keyed
+// PNG, so the pose-mode render path still works correctly.
 const PHARAOH_WAVE_GOODBYE = staticFile("poses/walk-out-right.png");
 
 loadFont("normal", {

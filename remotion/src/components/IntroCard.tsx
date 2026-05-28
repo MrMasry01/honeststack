@@ -5,6 +5,7 @@ import {
   useCurrentFrame,
   useVideoConfig,
   Img,
+  OffthreadVideo,
   staticFile,
 } from "remotion";
 import { loadFont } from "@remotion/google-fonts/Cairo";
@@ -14,7 +15,16 @@ import { loadFont } from "@remotion/google-fonts/Cairo";
 // to expect a personality, not just a news ticker. We use the
 // `celebrating` pose (arms up, joyful) — reads as "welcome to the
 // show" and matches the WC 2026 hype framing.
-const PHARAOH_CELEBRATING = staticFile("poses/celebrating.png");
+//
+// Source asset (May 28 2026 upgrade): the looped pre-keyed WebM with
+// alpha (Higgsfield image-to-video → ffmpeg chromakey). Previously
+// this was a raw .png and the white background visibly showed through
+// the gradient backdrop — the drop-shadow + spotlight that were meant
+// to mask the white edges weren't enough at 1080p production res.
+// The WebM has natural breathing/blinking motion so the intro now
+// reads as "the Pharaoh is alive and greeting you" rather than a
+// static sticker pasted on the card.
+const PHARAOH_CELEBRATING_WEBM = staticFile("poses/celebrating.webm");
 
 loadFont("normal", {
   weights: ["700", "800", "900"],
@@ -251,13 +261,12 @@ export const IntroCard: React.FC<IntroCardProps> = ({
         </span>
       </div>
 
-      {/* Pharaoh mascot — anchored bottom-center, half the frame height.
+      {/* Pharaoh mascot — anchored bottom-center, ~42% frame height.
           Sits BEHIND text via z-index because the gradient backdrop sits
-          underneath everything. The pose PNG has a white background that
-          gets knocked-out at runtime by Host's whiteKey system in the
-          per-segment scenes; for the intro/outro we composite with a
-          tinted radial spotlight underneath so the white edges blend
-          into the gradient without needing the heavy keying step. */}
+          underneath everything. Pre-keyed WebM (alpha channel baked in by
+          ffmpeg chromakey) — no runtime keying needed, composites cleanly
+          on the gradient. Plays the natural breath/blink motion baked into
+          the Higgsfield I2V clip, looped for the 3-second intro. */}
       <div
         style={{
           position: "absolute",
@@ -281,8 +290,10 @@ export const IntroCard: React.FC<IntroCardProps> = ({
             pointerEvents: "none",
           }}
         />
-        <Img
-          src={PHARAOH_CELEBRATING}
+        <OffthreadVideo
+          src={PHARAOH_CELEBRATING_WEBM}
+          loop
+          muted
           style={{
             position: "absolute",
             inset: 0,
@@ -290,7 +301,6 @@ export const IntroCard: React.FC<IntroCardProps> = ({
             height: "100%",
             objectFit: "contain",
             objectPosition: "bottom center",
-            mixBlendMode: "normal",
           }}
         />
       </div>
