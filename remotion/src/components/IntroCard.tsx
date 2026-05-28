@@ -5,7 +5,6 @@ import {
   useCurrentFrame,
   useVideoConfig,
   Img,
-  OffthreadVideo,
   staticFile,
 } from "remotion";
 import { loadFont } from "@remotion/google-fonts/Cairo";
@@ -16,15 +15,12 @@ import { loadFont } from "@remotion/google-fonts/Cairo";
 // `celebrating` pose (arms up, joyful) — reads as "welcome to the
 // show" and matches the WC 2026 hype framing.
 //
-// Source asset (May 28 2026 upgrade): the looped pre-keyed WebM with
-// alpha (Higgsfield image-to-video → ffmpeg chromakey). Previously
-// this was a raw .png and the white background visibly showed through
-// the gradient backdrop — the drop-shadow + spotlight that were meant
-// to mask the white edges weren't enough at 1080p production res.
-// The WebM has natural breathing/blinking motion so the intro now
-// reads as "the Pharaoh is alive and greeting you" rather than a
-// static sticker pasted on the card.
-const PHARAOH_CELEBRATING_WEBM = staticFile("poses/celebrating.webm");
+// celebrating.png carries a real baked-in alpha channel (colorkey'd in
+// commit 8326c0c, same as the outro's walk-out-right.png). The interim
+// celebrating.webm swap was opaque (yuv420p — no alpha), so it rendered a
+// white box on the gradient (and OffthreadVideo would also have needed a
+// `transparent` prop it never got). The keyed PNG composites cleanly.
+const PHARAOH_CELEBRATING = staticFile("poses/celebrating.png");
 
 loadFont("normal", {
   weights: ["700", "800", "900"],
@@ -263,10 +259,8 @@ export const IntroCard: React.FC<IntroCardProps> = ({
 
       {/* Pharaoh mascot — anchored bottom-center, ~42% frame height.
           Sits BEHIND text via z-index because the gradient backdrop sits
-          underneath everything. Pre-keyed WebM (alpha channel baked in by
-          ffmpeg chromakey) — no runtime keying needed, composites cleanly
-          on the gradient. Plays the natural breath/blink motion baked into
-          the Higgsfield I2V clip, looped for the 3-second intro. */}
+          underneath everything. celebrating.png has a baked alpha channel,
+          so it composites cleanly on the gradient with no runtime keying. */}
       <div
         style={{
           position: "absolute",
@@ -290,10 +284,8 @@ export const IntroCard: React.FC<IntroCardProps> = ({
             pointerEvents: "none",
           }}
         />
-        <OffthreadVideo
-          src={PHARAOH_CELEBRATING_WEBM}
-          loop
-          muted
+        <Img
+          src={PHARAOH_CELEBRATING}
           style={{
             position: "absolute",
             inset: 0,

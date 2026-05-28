@@ -66,7 +66,7 @@ interface PosePreset {
 }
 
 const POSE_PRESETS: Record<PharaohPose, PosePreset> = {
-  "idle-talk":       { src: null, videoSrc: staticFile("poses/idle-talk.webm"), anchor: "glide",         animation: "glide",            scaleMul: 1.0,  facing: null, reactive: false },
+  "idle-talk":       { src: null, anchor: "glide",         animation: "glide",            scaleMul: 1.0,  facing: null, reactive: false },
   "peek-left":       { src: staticFile("poses/peek-left.png"),    anchor: "edge-left",     animation: "slide-from-left",  scaleMul: 1.15, facing: 1,    reactive: true  },
   "peek-right":      { src: staticFile("poses/peek-right.png"),   anchor: "edge-right",    animation: "slide-from-right", scaleMul: 1.15, facing: -1,   reactive: true  },
   "point-up-right":  { src: staticFile("poses/point-up-right.png"),anchor: "bottom-right", animation: "fade-in",          scaleMul: 1.05, facing: null, reactive: true  },
@@ -77,7 +77,7 @@ const POSE_PRESETS: Record<PharaohPose, PosePreset> = {
   "walk-in-left":    { src: staticFile("poses/walk-in-left.png"), anchor: "bottom-left",   animation: "walk-from-left",   scaleMul: 1.0,  facing: null, reactive: false },
   "walk-out-right":  { src: staticFile("poses/walk-out-right.png"),anchor: "bottom-right", animation: "walk-out-right",   scaleMul: 1.0,  facing: null, reactive: false },
   "crying":          { src: staticFile("poses/crying.png"),       anchor: "bottom-center", animation: "fade-in",          scaleMul: 1.1,  facing: null, reactive: false },
-  "celebrating":     { src: staticFile("poses/celebrating.png"),  videoSrc: staticFile("poses/celebrating.webm"), anchor: "bottom-center", animation: "scale-pop",        scaleMul: 1.2,  facing: null, reactive: false },
+  "celebrating":     { src: staticFile("poses/celebrating.png"),  anchor: "bottom-center", animation: "scale-pop",        scaleMul: 1.2,  facing: null, reactive: false },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
