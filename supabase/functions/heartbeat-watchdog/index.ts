@@ -248,6 +248,118 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // ── 8. Editorial cron fired but produced no idea (G1) ──
+    // Catches the failure mode that bit us 22:00 UTC May 27 + 11:00 UTC May 28:
+    // pg_cron's net.http_post call returns immediately so pg_cron records
+    // "succeeded", but the actual edge function 546-timed-out 153s later. The
+    // editorial_fresh (12h) check above doesn't notice for hours. This check
+    // closes the gap to ~30 min (heartbeat cadence).
+    //
+    // Logic: if the most recent editorial cron fire was >10 min ago (so it
+    // had time to finish a successful 50-150s call) AND no content_idea
+    // was created after that fire → the function failed. We allow a 10min
+    // grace so we don't false-alarm on the cron→function gap.
+    try {
+      const { data: cronRows, error: cronErr } = await supabase.rpc(
+        "last_editorial_cron_fire",
+      );
+      if (cronErr) throw new Error(cronErr.message);
+      const row = Array.isArray(cronRows) ? cronRows[0] : cronRows;
+      const lastFire = row?.last_attempt_at ? new Date(row.last_attempt_at) : null;
+      if (lastFire) {
+        const minSinceFire = Math.round(
+          (Date.now() - lastFire.getTime()) / 60000,
+        );
+        const lastIdeaTs = lastSource ? null : null; // suppress unused-warning
+        const ideaAfterFire = lastIdea?.created_at
+          ? new Date(lastIdea.created_at) > lastFire
+          : false;
+        // Trip ONLY when: fire is >10min old (function would be done), <6h
+        // old (otherwise we're in the gap between cron schedule slots and
+        // the 8h check already covers it), and no idea landed after it.
+        const cronOrphaned =
+          minSinceFire > 10 && minSinceFire < 6 * 60 && !ideaAfterFire;
+        checks.push({
+          name: "editorial_cron_health",
+          ok: !cronOrphaned,
+          value: minSinceFire,
+          threshold: "idea created within 10min of cron fire",
+          message: cronOrphaned
+            ? `Editorial cron fired ${fmtMinutes(minSinceFire)} but NO content_idea was created. Almost certainly a 546 timeout — investigate editorial-brief function logs immediately.`
+            : `Last editorial cron fire ${fmtMinutes(minSinceFire)} and a fresh idea exists after it. Cron→function path healthy.`,
+        });
+        // Suppress unused-variable warning without changing runtime behavior.
+        void lastIdeaTs;
+      } else {
+        // No fires yet today — treat as ok (cold start)
+        checks.push({
+          name: "editorial_cron_health",
+          ok: true,
+          value: "no_fires_yet",
+          threshold: "idea created within 10min of cron fire",
+          message: "No cron fires recorded yet (cold start / fresh project).",
+        });
+      }
+    } catch (cronCheckErr) {
+      // Don't false-alarm if the RPC is briefly unavailable.
+      checks.push({
+        name: "editorial_cron_health",
+        ok: true,
+        value: "check_failed",
+        threshold: "idea created within 10min of cron fire",
+        message: `editorial-cron-health probe failed (treated as healthy until next run): ${
+          cronCheckErr instanceof Error ? cronCheckErr.message : String(cronCheckErr)
+        }`,
+      });
+    }
+
+    // ── 9. Recent publish failures (G4) ──
+    // Existing no_stuck_publish check only catches rows in `publishing` state.
+    // A failed publish (token revoked, content policy reject, IG container
+    // expired) lands in status='error' and never gets caught. This check
+    // surfaces those within the heartbeat cadence.
+    //
+    // Tolerance: 1 transient error is normal noise (TikTok especially has
+    // sporadic 5xx). 2+ in 6h is a real pattern.
+    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+    const { count: publishErrorCount } = await supabase
+      .from("posts_queue")
+      .select("id", { count: "exact", head: true })
+      .eq("owner_id", OWNER_ID)
+      .eq("status", "error")
+      .gte("updated_at", sixHoursAgo);
+    checks.push({
+      name: "no_recent_publish_failures",
+      ok: (publishErrorCount ?? 0) < 2,
+      value: publishErrorCount ?? 0,
+      threshold: "<2 in 6h",
+      message: `${publishErrorCount ?? 0} publish failures in last 6h (status=error). >=2 means a token expired, a platform policy tripped, or a CDN URL went stale — inspect posts_queue.error for specifics.`,
+    });
+
+    // ── 10. YouTube quota awareness (G6) ──
+    // YouTube Data API gives 10,000 quota units/day. videos.insert costs 1,600
+    // units, so the hard ceiling is 6 uploads/day. At 4/day we're at 6,400
+    // (64%), at 5/day we're at 8,000 (80%) — that's our yellow line. A
+    // reactive fire on a busy day can push us into red, so flag at 5+ so we
+    // know to defer or use a reserve key. Quota resets at 00:00 Pacific Time
+    // but counting last-24h is a safe approximation that errs on the side of
+    // raising the alarm earlier.
+    const oneDayAgoYt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { count: ytUploadCount } = await supabase
+      .from("posts_queue")
+      .select("id", { count: "exact", head: true })
+      .eq("owner_id", OWNER_ID)
+      .eq("platform", "youtube")
+      .eq("status", "posted")
+      .gte("posted_at", oneDayAgoYt);
+    checks.push({
+      name: "youtube_quota_safe",
+      ok: (ytUploadCount ?? 0) < 5,
+      value: ytUploadCount ?? 0,
+      threshold: "<5 uploads/24h (hard YT cap is 6)",
+      message: `${ytUploadCount ?? 0} YouTube uploads in last 24h × 1600 units = ${(ytUploadCount ?? 0) * 1600}/10000 used. At 5+ uploads we're within one fire of the daily cap; defer or rotate API key.`,
+    });
+
     const issues = checks.filter((c) => !c.ok);
     const ok = issues.length === 0;
 
