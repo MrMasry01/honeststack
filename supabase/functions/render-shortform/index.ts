@@ -1471,8 +1471,20 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
     // shows a countdown chip top-right on every scene. Once the tournament
     // starts (daysToWc === 0), the chip switches to a LIVE marker.
     days_to_wc: (() => {
-      const today = new Date();
-      const wcKickoff = new Date("2026-06-11T00:00:00Z");
+      // Use the Cairo CALENDAR date (midnight), identical to
+      // editorial-brief's daysToKickoff calc — NOT the live render
+      // timestamp. new Date() here measured ~13.1 days mid-render and
+      // rounded to 13, while the title/script/captions (computed by
+      // editorial from the Cairo date) said 14 — a visible mismatch on
+      // the countdown chip. Same formula on both sides => always agree.
+      const todayCairo = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Africa/Cairo",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(new Date());
+      const today = new Date(todayCairo);
+      const wcKickoff = new Date("2026-06-11");
       return Math.max(
         0,
         Math.round(
