@@ -1333,9 +1333,35 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
           visualDiag[i] = `gemini-stylised:${name}`;
           return await uploadPng(png, i);
         } catch (e) {
+          // A single unresolvable person photo must NEVER abort the whole
+          // video — this was the recurring "could not resolve a photo for
+          // <obscure player> — person illustration timed out" failure that
+          // killed entire renders (Mastantuono, Volpato, ...). Fall back to a
+          // FACE-FREE football scene via Pexels, exactly like the scene path
+          // below. We deliberately do NOT Pexels-search the person's NAME
+          // (that returns unrelated humans); a generic stadium beat is fine —
+          // the segment keeps its narration, caption and pose.
+          console.error(
+            `segment ${i}: person photo + illustration failed for "${name}" (` +
+              (e instanceof Error ? e.message : String(e)) +
+              `) — falling back to a face-free football scene`,
+          );
+          const fb = pexelsKey
+            ? await fetchPexelsPhoto("football soccer match stadium crowd", pexelsKey)
+            : null;
+          if (fb) {
+            visualDiag[i] = `pexels-person-fallback:${name}`;
+            return fb;
+          }
+          const generic = pexelsKey
+            ? await fetchPexelsPhoto("football stadium atmosphere", pexelsKey)
+            : null;
+          if (generic) {
+            visualDiag[i] = "pexels-generic";
+            return generic;
+          }
           throw new Error(
-            `segment ${i}: could not resolve a photo for ${name} — ` +
-              (e instanceof Error ? e.message : String(e)),
+            `segment ${i}: no image could be resolved for ${name} (no pexels key)`,
           );
         }
       }
