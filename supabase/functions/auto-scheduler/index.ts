@@ -269,10 +269,14 @@ Deno.serve(async (req: Request) => {
   }
 
   // ---- 4. PUBLISH INSTAGRAM ---------------------------------
-  // No per-account check (single channel-level token like YouTube).
-  // publish-instagram polls the container synchronously for up to
-  // 2 min — that's within the auto-scheduler's edge-function budget.
-  try {
+  // DISABLED 2026-05-30: the @honeststack IG account was permanently
+  // suspended by Instagram (Community Standards / inauthentic-behaviour).
+  // Publishing now only returns "object does not exist" 400s and can further
+  // flag the linked Meta app, so it's gated off. To re-enable with a fresh
+  // IG Business account + token, set the Supabase secret INSTAGRAM_ENABLED=true.
+  if (Deno.env.get("INSTAGRAM_ENABLED") !== "true") {
+    summary.instagram = { fired: false, reason: "disabled (account suspended 2026-05-30)" };
+  } else try {
     const { data: doneAssets } = await supabase
       .from("assets")
       .select("id, owner_id, idea_id, media, created_at")
