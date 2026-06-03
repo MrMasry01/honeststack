@@ -23,6 +23,7 @@ import { randomUUID } from "crypto";
 import express from "express";
 import type { Request, Response } from "express";
 import { createClient } from "@supabase/supabase-js";
+import { AwsClient } from "aws4fetch";
 import { bundle } from "@remotion/bundler";
 import { renderMedia, selectComposition } from "@remotion/renderer";
 import { NewsRoundupSchema } from "./src/schema";
@@ -43,6 +44,20 @@ const STORAGE_BUCKET = "assets";
 // running on a larger plan.
 const RENDER_CONCURRENCY = Number(process.env.RENDER_CONCURRENCY) || 1;
 
+// Cloudflare R2 (zero-egress video hosting). When all R2_* vars are set, the
+// finished MP4 is uploaded to R2 instead of Supabase Storage — keeping the
+// videos (the dominant Supabase egress) and the 50MB free-tier upload cap out
+// of the pipeline. If R2 is unset OR an R2 upload fails, we fall back to
+// Supabase, so enabling/rolling back is purely an env-var change.
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID ?? "";
+const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID ?? "";
+const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY ?? "";
+const R2_BUCKET = process.env.R2_BUCKET ?? "";
+const R2_PUBLIC_BASE_URL = (process.env.R2_PUBLIC_BASE_URL ?? "").replace(/\/+$/, "");
+const R2_ENABLED = Boolean(
+  R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && R2_BUCKET && R2_PUBLIC_BASE_URL,
+);
+
 if (!RENDER_SECRET) {
   console.warn("⚠️  RENDER_SECRET is not set — /render will reject all requests.");
 }
@@ -58,6 +73,37 @@ const supabase =
         auth: { persistSession: false },
       })
     : null;
+
+const r2 = R2_ENABLED
+  ? new AwsClient({
+      accessKeyId: R2_ACCESS_KEY_ID,
+      secretAccessKey: R2_SECRET_ACCESS_KEY,
+      region: "auto",
+      service: "s3",
+    })
+  : null;
+
+// Upload a buffer to Cloudflare R2 (S3 API) and return its public URL.
+// Throws on any non-2xx so the caller can fall back to Supabase.
+async function uploadToR2(
+  key: string,
+  body: Buffer,
+  contentType: string,
+): Promise<string> {
+  if (!r2) throw new Error("R2 not configured");
+  const endpoint =
+    `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${R2_BUCKET}/${key}`;
+  const res = await r2.fetch(endpoint, {
+    method: "PUT",
+    body,
+    headers: { "Content-Type": contentType },
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`R2 PUT ${res.status}: ${detail.slice(0, 200)}`);
+  }
+  return `${R2_PUBLIC_BASE_URL}/${key}`;
+}
 
 // ---------------------------------------------------------------------------
 // Job store (in-memory — fine for a single instance)
@@ -302,32 +348,46 @@ async function runRender(jobId: string, inputProps: NewsRoundupProps) {
     // in the Railway logs without guessing.
     const fileStat = fs.statSync(outputPath);
     const sizeMB = (fileStat.size / 1024 / 1024).toFixed(1);
-    console.log(`[${jobId}] render complete — ${sizeMB} MB — uploading to Supabase`);
-
-    if (!supabase) {
-      throw new Error("Supabase client not configured (missing env vars)");
-    }
+    console.log(`[${jobId}] render complete — ${sizeMB} MB — uploading (${R2_ENABLED ? "R2" : "Supabase"})`);
 
     const storagePath = `videos/${jobId}.mp4`;
     const fileBuffer = fs.readFileSync(outputPath);
 
-    const { error: uploadError } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .upload(storagePath, fileBuffer, {
-        contentType: "video/mp4",
-        upsert: true,
-      });
-
-    if (uploadError) {
-      // Make the size-limit failure mode unambiguous in the message that
-      // gets written to the assets row (instead of just "exceeded max size").
-      const sizeNote = fileStat.size > 50 * 1024 * 1024
-        ? ` (rendered ${sizeMB} MB > Supabase 50 MB free-tier upload limit — raise CRF or upgrade Supabase plan)`
-        : "";
-      throw new Error(`Supabase upload failed: ${uploadError.message}${sizeNote}`);
+    // Prefer R2 (zero-egress, no 50MB cap). On any R2 failure, fall back to
+    // Supabase so a finished render is never lost during the migration.
+    let publicUrl = "";
+    if (R2_ENABLED) {
+      try {
+        publicUrl = await uploadToR2(storagePath, fileBuffer, "video/mp4");
+        console.log(`[${jobId}] uploaded to R2 — ${publicUrl}`);
+      } catch (r2Err) {
+        console.error(
+          `[${jobId}] R2 upload failed, falling back to Supabase:`,
+          r2Err instanceof Error ? r2Err.message : String(r2Err),
+        );
+      }
     }
 
-    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${storagePath}`;
+    if (!publicUrl) {
+      if (!supabase) {
+        throw new Error("No upload target: R2 not configured and Supabase client missing");
+      }
+      const { error: uploadError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(storagePath, fileBuffer, {
+          contentType: "video/mp4",
+          upsert: true,
+        });
+      if (uploadError) {
+        // Make the size-limit failure mode unambiguous in the message that
+        // gets written to the assets row (instead of just "exceeded max size").
+        const sizeNote = fileStat.size > 50 * 1024 * 1024
+          ? ` (rendered ${sizeMB} MB > Supabase 50 MB free-tier upload limit — raise CRF, or set R2_* env vars to host video on R2)`
+          : "";
+        throw new Error(`Supabase upload failed: ${uploadError.message}${sizeNote}`);
+      }
+      publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${storagePath}`;
+    }
 
     updateJob(jobId, { status: "done", url: publicUrl });
     console.log(`[${jobId}] ✅ done — ${publicUrl}`);

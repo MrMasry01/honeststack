@@ -18,6 +18,7 @@
     "@remotion/player": "^4.0.290",
     "@remotion/renderer": "^4.0.290",
     "@supabase/supabase-js": "^2.45.4",
+    "aws4fetch": "^1.0.20",
     "express": "^4.21.0",
     "remotion": "^4.0.290",
     "tsx": "^4.16.2",
