@@ -187,15 +187,18 @@ Deno.serve(async (req: Request) => {
   }
 
   // ---- 2. PUBLISH YOUTUBE -----------------------------------
-  // Pick the OLDEST done asset that has no youtube posts_queue
-  // entry. Oldest-first so a backlog drains FIFO and the latest
-  // render isn't always jumping the queue.
+  // Pick the NEWEST current-pipeline done asset with no youtube posts_queue
+  // entry. NEWEST-first (was oldest-first): the old "oldest 50" query silently
+  // stalled publishing once the asset count passed 50 — fresh un-published
+  // renders fell outside the window while it kept re-scanning 50 old
+  // pre-caption_ar assets that fail the watershed. Newest-first tracks recent
+  // renders and gets the freshest news out first; a small backlog still drains.
   try {
     const { data: doneAssets } = await supabase
       .from("assets")
       .select("id, owner_id, idea_id, media, created_at")
       .eq("owner_id", OWNER_ID)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(50);
 
     const ytTarget = await pickUnpublished(
@@ -240,7 +243,7 @@ Deno.serve(async (req: Request) => {
         .from("assets")
         .select("id, owner_id, idea_id, media, created_at")
         .eq("owner_id", OWNER_ID)
-        .order("created_at", { ascending: true })
+        .order("created_at", { ascending: false })
         .limit(50);
 
       const tkTarget = await pickUnpublished(
@@ -281,7 +284,7 @@ Deno.serve(async (req: Request) => {
       .from("assets")
       .select("id, owner_id, idea_id, media, created_at")
       .eq("owner_id", OWNER_ID)
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
       .limit(50);
 
     const igTarget = await pickUnpublished(
