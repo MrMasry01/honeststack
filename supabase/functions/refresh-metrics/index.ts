@@ -7,7 +7,9 @@
 //
 // Platforms:
 //   - YouTube     — videos.list ?part=statistics → viewCount,
-//                   likeCount, commentCount. Full coverage.
+//                   likeCount, commentCount. Read with a plain API key
+//                   (YT_API_KEY) — statistics are public, and the OAuth
+//                   upload token lacks read scope (403 insufficient scopes).
 //   - Instagram   — media node fields: like_count, comments_count,
 //                   plays (for Reels), reach. Full coverage via
 //                   Graph API token.
@@ -25,8 +27,7 @@
 //
 // Auth: x-ingest-secret header.
 // Env (auto): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
-// Env (secrets): INGEST_SECRET, IG_GRAPH_TOKEN,
-//                YT_CLIENT_ID, YT_CLIENT_SECRET, YT_REFRESH_TOKEN
+// Env (secrets): INGEST_SECRET, IG_GRAPH_TOKEN, YT_API_KEY
 // ============================================================
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -65,36 +66,13 @@ const ZERO_METRICS: Metrics = {
 // ──────────────────────────────────────────────────────────────
 // YouTube — videos.list?part=statistics
 // ──────────────────────────────────────────────────────────────
-async function refreshYouTubeToken(
-  clientId: string,
-  clientSecret: string,
-  refreshToken: string,
-): Promise<string> {
-  const res = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: "refresh_token",
-    }),
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!res.ok) {
-    throw new Error(`YT token refresh ${res.status}`);
-  }
-  const data = await res.json();
-  if (!data?.access_token) throw new Error("YT token refresh: no access_token");
-  return data.access_token as string;
-}
-
 async function fetchYouTubeMetrics(
-  accessToken: string,
+  apiKey: string,
   videoIds: string[],
-): Promise<Map<string, Metrics>> {
+): Promise<{ map: Map<string, Metrics>; diag: Record<string, unknown> }> {
   const out = new Map<string, Metrics>();
-  if (videoIds.length === 0) return out;
+  const diag: Record<string, unknown> = { chunks: [], total_items: 0 };
+  if (videoIds.length === 0) return { map: out, diag };
 
   // YouTube allows comma-joined ids, up to 50 at a time.
   const chunks: string[][] = [];
@@ -103,19 +81,30 @@ async function fetchYouTubeMetrics(
   }
 
   for (const chunk of chunks) {
+    // videos.list?part=statistics is PUBLIC data — read it with a plain
+    // API key. (The OAuth refresh token we use to upload only carries the
+    // youtube.upload scope, so it 403s "insufficient scopes" on reads.)
     const url = `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${
       chunk.join(",")
-    }`;
+    }&key=${apiKey}`;
     const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
       signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) {
-      console.error(`YT metrics ${res.status} for ${chunk.length} ids`);
+      const body = await res.text().catch(() => "");
+      console.error(`YT metrics ${res.status} for ${chunk.length} ids: ${body.slice(0, 300)}`);
+      (diag.chunks as unknown[]).push({
+        status: res.status,
+        ids: chunk.length,
+        error: body.slice(0, 300),
+      });
       continue;
     }
     const data = await res.json();
-    for (const item of data.items ?? []) {
+    const items = data.items ?? [];
+    (diag.chunks as unknown[]).push({ status: 200, ids: chunk.length, returned: items.length });
+    diag.total_items = (diag.total_items as number) + items.length;
+    for (const item of items) {
       const s = item.statistics ?? {};
       out.set(item.id, {
         views: Number(s.viewCount ?? 0),
@@ -126,7 +115,7 @@ async function fetchYouTubeMetrics(
       });
     }
   }
-  return out;
+  return { map: out, diag };
 }
 
 // ──────────────────────────────────────────────────────────────
@@ -281,22 +270,25 @@ Deno.serve(async (req: Request) => {
     // ── YouTube ──
     const ytPosts = byPlatform.youtube ?? [];
     if (ytPosts.length > 0) {
-      const ytClientId = Deno.env.get("YT_CLIENT_ID");
-      const ytClientSecret = Deno.env.get("YT_CLIENT_SECRET");
-      const ytRefreshToken = Deno.env.get("YT_REFRESH_TOKEN");
-      if (!ytClientId || !ytClientSecret || !ytRefreshToken) {
-        console.warn("YouTube secrets missing — skipping YT metrics");
+      const ytApiKey = Deno.env.get("YT_API_KEY");
+      if (!ytApiKey) {
+        console.warn("YT_API_KEY missing — skipping YT metrics");
+        summary.youtube_debug = { error: "YT_API_KEY secret not set" };
       } else {
-        const accessToken = await refreshYouTubeToken(
-          ytClientId, ytClientSecret, ytRefreshToken,
-        );
         const videoIds = ytPosts
           .map((p) => p.external_post_id)
           .filter((v): v is string => Boolean(v));
-        const metrics = await fetchYouTubeMetrics(accessToken, videoIds);
+        const { map: metrics, diag: ytDiag } = await fetchYouTubeMetrics(
+          ytApiKey, videoIds,
+        );
+        let ytTotalViews = 0;
+        let ytMatched = 0;
         for (const post of ytPosts) {
           if (!post.external_post_id) continue;
-          const m = metrics.get(post.external_post_id) ?? ZERO_METRICS;
+          const hit = metrics.get(post.external_post_id);
+          const m = hit ?? ZERO_METRICS;
+          if (hit) ytMatched += 1;
+          ytTotalViews += m.views;
           upserts.push({
             post_id: post.id,
             owner_id: OWNER_ID,
@@ -305,6 +297,12 @@ Deno.serve(async (req: Request) => {
           });
           summary.youtube = (summary.youtube as number) + 1;
         }
+        summary.youtube_debug = {
+          ...ytDiag,
+          matched_posts: ytMatched,
+          total_views_fetched: ytTotalViews,
+          sample_ids: videoIds.slice(0, 3),
+        };
       }
     }
 
