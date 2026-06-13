@@ -11,10 +11,13 @@ import type { NewsRoundupProps } from "./schema";
 import { ParallaxBackdrop } from "./components/ParallaxBackdrop";
 import { Host } from "./components/Host";
 import { CaptionStrip } from "./components/CaptionStrip";
-import { IntroCard } from "./components/IntroCard";
 import { OutroCard } from "./components/OutroCard";
 
-const INTRO_FRAMES = 90; // 3 s at 30fps
+// Cold-open: NO branded intro card. The video opens straight on segment 1
+// (the hook) — the single highest-leverage TikTok retention move. Branding
+// lives in the persistent watermark + the outro card. MUST stay in sync with
+// the same constant in Root.tsx's calculateNewsRoundupMetadata.
+const INTRO_FRAMES = 0;
 const OUTRO_FRAMES = 90; // 3 s at 30fps
 
 /**
@@ -475,7 +478,6 @@ export const NewsRoundup: React.FC<NewsRoundupProps> = ({
   host_voice_url,
   segments,
   brand,
-  intro_text,
   outro_handle,
   days_to_wc,
 }) => {
@@ -505,14 +507,8 @@ export const NewsRoundup: React.FC<NewsRoundupProps> = ({
         <Audio src={host_voice_url} volume={1} />
       )}
 
-      {/* ── Intro card ── */}
-      <Sequence from={0} durationInFrames={INTRO_FRAMES}>
-        <IntroCard
-          introText={intro_text}
-          brand={brand}
-          durationInFrames={INTRO_FRAMES}
-        />
-      </Sequence>
+      {/* ── Cold open: NO intro card. Open directly on segment 1 (the hook).
+             Branding persists via the watermark below + the outro card. ── */}
 
       {/* ── Segment scenes ── */}
       {segments.map((segment, i) => {

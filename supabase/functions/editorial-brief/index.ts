@@ -123,17 +123,19 @@ Every roundup MUST contain at least one segment with the Pharaoh's personal opin
   - «المنتخب اللي مَحَدش بَيتكلم عنه دلوقتي؟ Saudi. سَمعتوها مني الأول.»
 Hot take ideally sits in segment 2-4 (after the lead news, before the CTA close). The Pharaoh is a creator, not a wire service.
 
-== WORLD CUP COUNTDOWN + LEAD-UP NARRATIVE ==
-World Cup 2026 kicks off June 11, 2026 in Mexico City. The user message will tell you today's date and exact days remaining. ANCHOR every roundup to the countdown — the clock IS the story right now:
-  - «17 يوم بَس على المونديال — كل خبر دلوقتي بَيتعد»
+== WORLD CUP PHASE NARRATIVE (READ THE USER MESSAGE FIRST) ==
+World Cup 2026 kicked off June 11, 2026 in Mexico City. The user message tells you whether we are PRE-KICKOFF (it gives "Days remaining: N") or LIVE (it says "is LIVE — today is DAY N"). Honor that signal exactly — it OVERRIDES any countdown instinct.
+
+PRE-KICKOFF (user message gives days remaining, N>0): the countdown IS the story. Open every roundup on the day count:
+  - «١٧ يوم بَس على المونديال — كل خبر دلوقتي بَيتعد»
   - «أسبوعين على افتتاح المونديال، والقايمات لِسه بَتتلَخبَط»
-  - «كل ساعة بَيقرب المونديال، وأنا قاعد بَجمَعلكوا اللي بَيحصل»
-- In the WEEK BEFORE kickoff (June 4-10): countdown is paramount. Every roundup opens with the day count.
-- In the FIRST WEEK of the tournament: lead with results + group standings + who advanced.
-- In the GROUP STAGE: organize by group ("النهارده كان يوم الجروب C — هَوَجَعك بنتيجة كل ماتش").
-- In the KNOCKOUTS: bracket logic + "اللي بَره" / "اللي لِسه" framing.
-- During the FINAL WEEK: "أنا قاعد أتفرّج معاكوا" tone — the Pharaoh is now ALONGSIDE the audience, not ahead of them.
-The countdown is also a viewer-retention loop: when the viewer knows "هَيرجع بعد 6 ساعات"، they come back. Make the cadence visible in every roundup.
+
+LIVE (user message says the tournament is live, DAY N): the countdown is DEAD. NEVER say "X days to the World Cup", NEVER «بَيقرب المونديال», NEVER "soon". The Pharaoh is now watching the matches ALONGSIDE the audience, in real time. Lead with the football itself:
+  - FIRST DAYS: lead with results + scorelines + who won last night + group standings.
+  - GROUP STAGE: organize by group ("النهارده كان يوم الجروب C — هَوَجَعك بنتيجة كل ماتش").
+  - KNOCKOUTS: bracket logic + "اللي بَره" / "اللي لِسه" framing.
+  - FINAL WEEK: "أنا قاعد أتفرّج معاكوا" — fully alongside the audience.
+The 4×/day cadence is itself the viewer-retention loop: when the viewer knows "هَيرجع تاني بعد شوية"، they come back. Make the live, today-focused energy visible in every roundup — never a stale countdown.
 
 == PHARAOH POSE (per-segment animation hint) ==
 Each segment may optionally carry a pharaoh_pose. The Remotion renderer swaps the on-screen Pharaoh mascot to the matching pose PNG with a tailored entry animation — peek-left/right slide in from the edges, walk-in-left walks across, point-up-right points at the photo, surprised pops in with shock, etc. Picking the right pose per segment makes the videos feel directed, not auto-generated. Pick from:
@@ -651,13 +653,28 @@ Deno.serve(async (req: Request) => {
       day: "2-digit",
     }).format(new Date());
     const WC_KICKOFF_ISO = "2026-06-11";
-    const daysToKickoff = Math.max(
-      0,
-      Math.round(
-        (new Date(WC_KICKOFF_ISO).getTime() - new Date(todayCairo).getTime()) /
-          (24 * 60 * 60 * 1000),
-      ),
+    // Signed day delta: positive = days BEFORE kickoff, <=0 = tournament LIVE.
+    // (We used to clamp at 0, which sent "Days remaining: 0" + a "0-day
+    // countdown" anchor once the WC started — the Pharaoh kept counting down to
+    // a tournament already in progress. Now we flip to live "Day N" framing.)
+    const rawDaysToKickoff = Math.round(
+      (new Date(WC_KICKOFF_ISO).getTime() - new Date(todayCairo).getTime()) /
+        (24 * 60 * 60 * 1000),
     );
+    const isLive = rawDaysToKickoff <= 0;
+    const daysToKickoff = Math.max(0, rawDaysToKickoff);
+    const tournamentDay = 1 - rawDaysToKickoff; // kickoff day (Jun 11) = Day 1
+    // Phase anchor injected at the top of every prompt (standard + reactive).
+    const phaseLine = isLive
+      ? `World Cup 2026 is LIVE — today is DAY ${tournamentDay} of the tournament ` +
+        `(kicked off ${WC_KICKOFF_ISO}).\n` +
+        `The countdown is OVER. Do NOT count down or say "X days to the World Cup". ` +
+        `Lead with the football happening RIGHT NOW: last night's / today's results, ` +
+        `scorelines, who advanced, group standings, standout performances, upsets, ` +
+        `injuries, and the next fixtures. The Pharaoh watches alongside the audience.`
+      : `World Cup 2026 kickoff: ${WC_KICKOFF_ISO} (Mexico City). ` +
+        `Days remaining: ${daysToKickoff}.\n` +
+        `Anchor the roundup to the ${daysToKickoff}-day countdown — the clock is the story.`;
 
     const userMessage = isReactive
       ? // ── REACTIVE MOMENT prompt ──
@@ -665,8 +682,7 @@ Deno.serve(async (req: Request) => {
         // just witnessed (match end, Salah goal, federation news). 4
         // segments instead of 5-7, lead with the moment, urgent tone.
         `Today (Cairo): ${todayCairo}.\n` +
-        `World Cup 2026 kickoff: ${WC_KICKOFF_ISO} (Mexico City).\n` +
-        `Days remaining: ${daysToKickoff}.\n\n` +
+        `${phaseLine}\n\n` +
         `== REACTIVE MOMENT ==\n` +
         `Something specific just happened — the user fired this brief manually within minutes of the event. Produce a SINGLE-FOCUS reactive video, NOT a multi-story roundup:\n` +
         `- 4 segments only (not 5-7)\n` +
@@ -686,15 +702,18 @@ Deno.serve(async (req: Request) => {
         `\nReturn only the structured JSON (including thread_ids and thread_updates — pick 1 thread that captures this moment).`
       : // ── STANDARD ROUNDUP prompt ──
         `Today (Cairo): ${todayCairo}.\n` +
-        `World Cup 2026 kickoff: ${WC_KICKOFF_ISO} (Mexico City).\n` +
-        `Days remaining: ${daysToKickoff}.\n\n` +
+        `${phaseLine}\n\n` +
         `Time bucket: ${bucket}` +
         (bucket === "18-24" ? " (primetime — lead with the single biggest story of the day)." : ".") +
         `\n\n` +
         threadsBlock +
         `The scraped football news in the LAST 8 HOURS, pre-filtered to exclude anything already covered in a recent roundup (JSON). Reference each item's "id" in brief.source_ids:\n\n` +
         JSON.stringify(sources) +
-        `\n\nProduce ONE roundup video for this window now. Anchor it to the ${daysToKickoff}-day countdown. Return only the structured JSON (including thread_ids and thread_updates).`;
+        `\n\nProduce ONE roundup video for this window now. ${
+          isLive
+            ? `It's DAY ${tournamentDay} of the live tournament — lead with the football, never count down.`
+            : `Anchor it to the ${daysToKickoff}-day countdown.`
+        } Return only the structured JSON (including thread_ids and thread_updates).`;
 
     const apiResp = await fetch(ANTHROPIC_URL, {
       method: "POST",

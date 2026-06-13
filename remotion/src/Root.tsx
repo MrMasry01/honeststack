@@ -23,7 +23,7 @@ export const calculateNewsRoundupMetadata = async ({
 }: {
   props: NewsRoundupProps;
 }) => {
-  const INTRO_FRAMES = 90; // 3 s
+  const INTRO_FRAMES = 0; // cold-open — no intro card (see NewsRoundup.tsx)
   const OUTRO_FRAMES = 90; // 3 s
   const segmentFrames = props.segments.reduce((sum, seg) => {
     return sum + Math.round((seg.duration_ms / 1000) * FPS);

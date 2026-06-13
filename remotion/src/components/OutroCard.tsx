@@ -150,7 +150,7 @@ export const OutroCard: React.FC<OutroCardProps> = ({
             textShadow: "0 2px 12px rgba(0,0,0,0.8)",
           }}
         >
-          تابعوني — أنا بَنزّل
+          قول رأيك تحت 👇
         </p>
         <p
           style={{
@@ -163,7 +163,7 @@ export const OutroCard: React.FC<OutroCardProps> = ({
             textShadow: `0 2px 12px ${brand.accent}55`,
           }}
         >
-          ٤ مرّات في اليوم
+          أنا بَقرا كل كومنت
         </p>
       </div>
 
