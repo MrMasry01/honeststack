@@ -8,20 +8,23 @@
 //   1. Auth: requires user JWT. Verifies asset ownership.
 //   2. Looks up the user's social_accounts row for platform='tiktok'.
 //      Refreshes access_token if expired.
-//   3. Posts to /v2/post/publish/inbox/video/init/ with
-//      source_info.source = "PULL_FROM_URL" and the asset's public
-//      Supabase storage URL — TikTok pulls the MP4 directly, no
-//      MB-of-bytes through the edge function.
-//   4. Polls /v2/post/publish/status/fetch/ until status is in a
-//      terminal state (PUBLISH_COMPLETE, PUBLISH_FAILED, etc.).
-//   5. Updates posts_queue + assets.media with the result.
+//   3. DIRECT POST (default, audited app): queries creator_info, then
+//      POSTs /v2/post/publish/video/init/ with source FILE_UPLOAD +
+//      privacy PUBLIC_TO_EVERYONE — the video auto-publishes publicly.
+//      Set TIKTOK_DIRECT_POST=false (or on any direct failure) to fall
+//      back to /inbox/video/init/ (lands as a draft for manual posting).
+//      We upload bytes (FILE_UPLOAD) so no Portal domain verification.
+//   4. Polls /v2/post/publish/status/fetch/ until terminal
+//      (PUBLISH_COMPLETE / SEND_TO_USER_INBOX / *_FAILED).
+//   5. Updates posts_queue (+ external_url for direct posts) + assets.media.
 //
-// Sandbox-vs-production: the same endpoints work in sandbox mode.
-// In sandbox the post lands as a private draft visible only to
-// approved test users.
+// Read-only validation: POST { "check": "creator_info" } returns the
+// account's allowed privacy levels — confirms the audited app can direct-post
+// without actually posting anything.
 //
 // Env (auto): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY
 // Env (secrets): TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET
+// Env (optional): TIKTOK_DIRECT_POST ("false" → inbox/manual flow; default direct)
 // ============================================================
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -38,7 +41,9 @@ function json(body: unknown, status = 200): Response {
 }
 
 const TOKEN_REFRESH_URL = "https://open.tiktokapis.com/v2/oauth/token/";
-const PUBLISH_INIT_URL = "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/";
+const CREATOR_INFO_URL = "https://open.tiktokapis.com/v2/post/publish/creator_info/query/";
+const PUBLISH_INIT_INBOX_URL = "https://open.tiktokapis.com/v2/post/publish/inbox/video/init/";
+const PUBLISH_INIT_DIRECT_URL = "https://open.tiktokapis.com/v2/post/publish/video/init/";
 const PUBLISH_STATUS_URL = "https://open.tiktokapis.com/v2/post/publish/status/fetch/";
 
 type Asset = {
@@ -175,29 +180,87 @@ function buildTitle(idea: Idea | null, asset: Asset): string {
   return `${hook}${ctaBlock}${tagBlock}`;
 }
 
-// FILE_UPLOAD init. Returns publish_id + upload_url. We don't use
-// PULL_FROM_URL because that requires the source domain to be verified
-// in the TikTok Developer Portal — and we don't own supabase.co.
+// creator_info query — REQUIRED before a direct post. Returns the account's
+// allowed privacy levels + interaction settings so we send a valid post_info.
+type CreatorInfo = {
+  privacy_level_options: string[];
+  comment_disabled: boolean;
+  duet_disabled: boolean;
+  stitch_disabled: boolean;
+  creator_username: string | null;
+  creator_nickname: string | null;
+};
+
+async function queryCreatorInfo(accessToken: string): Promise<CreatorInfo> {
+  const res = await fetch(CREATOR_INFO_URL, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+      "Content-Type": "application/json; charset=UTF-8",
+    },
+    signal: AbortSignal.timeout(20_000),
+  });
+  const data = await res.json();
+  if (!res.ok || (data?.error && data.error.code && data.error.code !== "ok")) {
+    throw new Error(
+      `tiktok creator_info ${res.status}: ${JSON.stringify(data).slice(0, 300)}`,
+    );
+  }
+  const d = data?.data ?? {};
+  return {
+    privacy_level_options: Array.isArray(d.privacy_level_options)
+      ? d.privacy_level_options
+      : [],
+    comment_disabled: Boolean(d.comment_disabled),
+    duet_disabled: Boolean(d.duet_disabled),
+    stitch_disabled: Boolean(d.stitch_disabled),
+    creator_username: typeof d.creator_username === "string" ? d.creator_username : null,
+    creator_nickname: typeof d.creator_nickname === "string" ? d.creator_nickname : null,
+  };
+}
+
+// Video init. Returns publish_id + upload_url. We use FILE_UPLOAD (not
+// PULL_FROM_URL) so we never need TikTok Developer Portal domain verification.
+//   directPost=true  → /v2/post/publish/video/init/ (auto-publishes publicly;
+//                      requires the audited app + a valid privacy_level)
+//   directPost=false → /inbox/video/init/ (lands as a draft in the user's
+//                      TikTok inbox for manual posting)
+type PublishOpts = {
+  directPost: boolean;
+  privacyLevel: string;
+  disableComment: boolean;
+  disableDuet: boolean;
+  disableStitch: boolean;
+};
+
 async function publishInit(
   accessToken: string,
   videoSize: number,
   title: string,
+  opts: PublishOpts,
 ): Promise<{ publish_id: string; upload_url: string }> {
   // Single-chunk upload: TikTok requires chunk_size = video_size when
   // total_chunk_count = 1. Our rendered MP4s are 15-30MB, well within
   // the 64MB single-chunk ceiling.
-  const body = {
-    post_info: {
+  const post_info = opts.directPost
+    ? {
       title,
-      // Sandbox / Inbox flow: video lands as a private draft in the
-      // user's TikTok inbox. They tap to publish from the TikTok app.
-      // For direct publish (requires app audit approval), switch to
-      // /v2/post/publish/video/init/ with post_mode = "DIRECT_POST".
+      privacy_level: opts.privacyLevel,
+      disable_comment: opts.disableComment,
+      disable_duet: opts.disableDuet,
+      disable_stitch: opts.disableStitch,
+    }
+    : {
+      // Inbox flow: lands as a private draft; the user sets final privacy +
+      // caption when they post from the TikTok app.
+      title,
       privacy_level: "SELF_ONLY",
       disable_duet: false,
       disable_stitch: false,
       disable_comment: false,
-    },
+    };
+  const body = {
+    post_info,
     source_info: {
       source: "FILE_UPLOAD",
       video_size: videoSize,
@@ -206,15 +269,18 @@ async function publishInit(
     },
   };
 
-  const res = await fetch(PUBLISH_INIT_URL, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${accessToken}`,
-      "Content-Type": "application/json; charset=UTF-8",
+  const res = await fetch(
+    opts.directPost ? PUBLISH_INIT_DIRECT_URL : PUBLISH_INIT_INBOX_URL,
+    {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json; charset=UTF-8",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
     },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30_000),
-  });
+  );
 
   const data = await res.json();
   const publishId = data?.data?.publish_id as string | undefined;
@@ -346,6 +412,39 @@ Deno.serve(async (req: Request) => {
     userId = userResp.user.id;
   }
 
+  // ---- read-only validation: { "check": "creator_info" } ------
+  // Confirms the audited app can direct-post (returns allowed privacy levels)
+  // WITHOUT posting anything. No asset needed.
+  if (typeof (body as { check?: unknown })?.check === "string" &&
+      (body as { check?: unknown }).check === "creator_info") {
+    const adminC = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data: acct } = await adminC
+      .from("social_accounts")
+      .select("id, open_id, access_token, refresh_token, expires_at, display_name")
+      .eq("owner_id", userId).eq("platform", "tiktok").maybeSingle<SocialAccount>();
+    if (!acct) return json({ ok: false, error: "TikTok not connected" }, 400);
+    let token = acct.access_token;
+    try {
+      if (isExpired(acct.expires_at) && acct.refresh_token) {
+        const r = await refreshAccessToken(clientKey, clientSecret, acct.refresh_token);
+        token = r.access_token;
+        await adminC.from("social_accounts").update({
+          access_token: r.access_token,
+          refresh_token: r.refresh_token,
+          expires_at: new Date(Date.now() + r.expires_in * 1000).toISOString(),
+          updated_at: new Date().toISOString(),
+        }).eq("id", acct.id);
+      }
+      const ci = await queryCreatorInfo(token);
+      const directDefault = Deno.env.get("TIKTOK_DIRECT_POST") !== "false";
+      return json({ ok: true, check: "creator_info", direct_post_default: directDefault, ...ci });
+    } catch (e) {
+      return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 200);
+    }
+  }
+
   const assetId = typeof body?.asset_id === "string" ? body.asset_id : "";
   if (!assetId) return json({ ok: false, error: "asset_id required" }, 400);
 
@@ -418,6 +517,8 @@ Deno.serve(async (req: Request) => {
   // can't block the HTTP response for that long (Supabase edge timeout).
   let publishId: string | null = null;
   let accessToken = account.access_token;
+  let creatorUsername: string | null = null;
+  let usedDirectPost = false;
 
   try {
     if (isExpired(account.expires_at) && account.refresh_token) {
@@ -442,11 +543,59 @@ Deno.serve(async (req: Request) => {
     const mp4Bytes = new Uint8Array(await mp4Res.arrayBuffer());
     console.log(`[${assetId}] mp4 fetched: ${(mp4Bytes.length / 1024 / 1024).toFixed(2)} MB`);
 
-    // 2. Tell TikTok we're about to upload — they return an upload_url.
-    const init = await publishInit(accessToken, mp4Bytes.length, title);
+    // 1b. Direct-post setup. Default ON now the app is audited; set
+    //     TIKTOK_DIRECT_POST=false to force the inbox (manual) flow. For a
+    //     direct post we MUST query creator_info first to learn the account's
+    //     allowed privacy levels + interaction settings.
+    usedDirectPost = Deno.env.get("TIKTOK_DIRECT_POST") !== "false";
+    let privacyLevel = "SELF_ONLY";
+    let disableComment = false, disableDuet = false, disableStitch = false;
+    if (usedDirectPost) {
+      try {
+        const ci = await queryCreatorInfo(accessToken);
+        creatorUsername = ci.creator_username;
+        privacyLevel = ci.privacy_level_options.includes("PUBLIC_TO_EVERYONE")
+          ? "PUBLIC_TO_EVERYONE"
+          : (ci.privacy_level_options[0] ?? "SELF_ONLY");
+        // The API rejects ENABLING an interaction the account has disabled.
+        disableComment = ci.comment_disabled;
+        disableDuet = ci.duet_disabled;
+        disableStitch = ci.stitch_disabled;
+      } catch (ciErr) {
+        console.error(
+          `[${assetId}] creator_info failed — falling back to inbox flow:`,
+          ciErr instanceof Error ? ciErr.message : String(ciErr),
+        );
+        usedDirectPost = false;
+      }
+    }
+
+    // 2. Tell TikTok we're about to upload — they return an upload_url. If a
+    //    direct-post init is rejected, fall back to the inbox flow so the
+    //    video is never lost (lands as a draft for manual posting).
+    let init: { publish_id: string; upload_url: string };
+    try {
+      init = await publishInit(accessToken, mp4Bytes.length, title, {
+        directPost: usedDirectPost, privacyLevel,
+        disableComment, disableDuet, disableStitch,
+      });
+    } catch (initErr) {
+      if (!usedDirectPost) throw initErr;
+      console.error(
+        `[${assetId}] direct-post init failed — retrying via inbox:`,
+        initErr instanceof Error ? initErr.message : String(initErr),
+      );
+      usedDirectPost = false;
+      init = await publishInit(accessToken, mp4Bytes.length, title, {
+        directPost: false, privacyLevel: "SELF_ONLY",
+        disableComment: false, disableDuet: false, disableStitch: false,
+      });
+    }
     publishId = init.publish_id;
     const uploadUrl = init.upload_url;
-    console.log(`[${assetId}] tiktok publish init -> ${publishId}`);
+    console.log(
+      `[${assetId}] tiktok publish init (${usedDirectPost ? "direct" : "inbox"}) -> ${publishId}`,
+    );
 
     // 3. PUT the bytes (single chunk).
     await uploadVideoChunk(uploadUrl, mp4Bytes);
@@ -473,6 +622,8 @@ Deno.serve(async (req: Request) => {
   const capturedQueueId = queueId!;
   const capturedAssetId = assetId;
   const capturedMedia = asset.media ?? {};
+  const capturedCreatorUsername = creatorUsername;
+  const capturedDirect = usedDirectPost;
 
   const backgroundPoll = (async () => {
     try {
@@ -482,17 +633,37 @@ Deno.serve(async (req: Request) => {
       const isSuccess = status === "PUBLISH_COMPLETE" || status === "SEND_TO_USER_INBOX";
 
       if (isSuccess) {
+        // Direct posts return the public video id once processed (TikTok's
+        // field is the misspelled "publicaly_available_post_id"; accept both).
+        // Inbox posts have no public URL until the user posts from the app.
+        const data = (raw?.data ?? {}) as Record<string, unknown>;
+        const postIds = (data.publicaly_available_post_id ??
+          data.publicly_available_post_id) as unknown;
+        const videoId = Array.isArray(postIds) && postIds.length
+          ? String(postIds[0])
+          : null;
+        const externalUrl = (capturedDirect && videoId && capturedCreatorUsername)
+          ? `https://www.tiktok.com/@${capturedCreatorUsername}/video/${videoId}`
+          : null;
+
         await admin.from("posts_queue").update({
           status: "posted",
-          external_post_id: capturedPublishId,
-          external_url: null, // Inbox flow: no public URL until user publishes from app
+          external_post_id: videoId ?? capturedPublishId,
+          external_url: externalUrl,
           posted_at: nowIso,
           updated_at: nowIso,
           error: null,
         }).eq("id", capturedQueueId);
 
         await admin.from("assets").update({
-          media: { ...capturedMedia, tiktok_publish_id: capturedPublishId, tiktok_status: status },
+          media: {
+            ...capturedMedia,
+            tiktok_publish_id: capturedPublishId,
+            tiktok_status: status,
+            tiktok_mode: capturedDirect ? "direct" : "inbox",
+            ...(videoId ? { tiktok_video_id: videoId } : {}),
+            ...(externalUrl ? { tiktok_url: externalUrl } : {}),
+          },
         }).eq("id", capturedAssetId);
       } else {
         const failMsg = `tiktok ${status}: ${JSON.stringify(raw).slice(0, 600)}`;
