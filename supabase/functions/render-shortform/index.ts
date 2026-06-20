@@ -27,8 +27,11 @@
 // Auth:  header `x-ingest-secret` must equal env INGEST_SECRET.
 // Env (auto-injected by Supabase): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 // Env (set as secrets):
-//   INGEST_SECRET, ELEVENLABS_API_KEY, GEMINI_API_KEY, PEXELS_API_KEY,
+//   INGEST_SECRET, ELEVENLABS_API_KEY, PEXELS_API_KEY,
 //   REMOTION_URL, RENDER_SECRET
+// Env (optional): GEMINI_API_KEY — AI image gen + scene-composition vision.
+//   When absent (API cancelled) or GEMINI_ENABLED=false, the renderer uses
+//   free Pexels stock + heuristic composition instead. No Gemini = no cost.
 // ============================================================
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -845,7 +848,8 @@ Deno.serve(async (req: Request) => {
       ["SUPABASE_URL", supabaseUrl],
       ["SUPABASE_SERVICE_ROLE_KEY", serviceKey],
       ["ELEVENLABS_API_KEY", elevenKey],
-      ["GEMINI_API_KEY", geminiKey],
+      // GEMINI_API_KEY is OPTIONAL — when absent the renderer falls back to
+      // free Pexels stock + heuristic composition (see geminiEnabled below).
       ["REMOTION_URL", remotionUrl],
       ["RENDER_SECRET", renderSecret],
     ].filter(([, v]) => !v).map(([k]) => k);
@@ -1169,6 +1173,11 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
   // Promise.all so wall time ≈ the slowest one. There is no avatar pipeline:
   // the host is the fixed Egyptian Pharaoh mascot bundled with Remotion.
   const pexelsKey = Deno.env.get("PEXELS_API_KEY") ?? "";
+  // Gemini is optional + cost-controlled. Disabled when the key is absent
+  // (API cancelled) or GEMINI_ENABLED=false — then every image path uses the
+  // free Pexels fallback and scene composition falls back to heuristics.
+  const geminiEnabled = Boolean((Deno.env.get("GEMINI_API_KEY") ?? "").trim()) &&
+    Deno.env.get("GEMINI_ENABLED") !== "false";
 
   // (a) PER-SEGMENT TTS — one ElevenLabs request per segment, parallel.
   //
@@ -1310,42 +1319,46 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
       if (personMatch) {
         const name = personMatch[1].trim();
         const wiki = await fetchWikipediaPhoto(name);
-        if (wiki && await verifyPersonPhoto(wiki, name, geminiKey)) {
+        if (wiki && (!geminiEnabled || await verifyPersonPhoto(wiki, name, geminiKey))) {
           visualDiag[i] = `wikipedia:${name}`;
           return wiki;
         }
         console.warn(
           `segment ${i}: no verified real photo for "${name}" — stylising`,
         );
-        // No verified real photo — a STYLISED illustration, never a faked
-        // realistic face and never an unrelated Pexels human.
-        try {
-          const png = await Promise.race([
-            generateImage(
-              `A stylised flat-colour cartoon illustration representing ` +
-                `footballer ${name} in kit, brand style, not photorealistic`,
-              geminiKey,
-            ),
-            sleep(SEGMENT_GEMINI_BUDGET_MS).then(() => {
-              throw new Error("person illustration timed out");
-            }),
-          ]);
-          visualDiag[i] = `gemini-stylised:${name}`;
-          return await uploadPng(png, i);
-        } catch (e) {
-          // A single unresolvable person photo must NEVER abort the whole
-          // video — this was the recurring "could not resolve a photo for
-          // <obscure player> — person illustration timed out" failure that
-          // killed entire renders (Mastantuono, Volpato, ...). Fall back to a
-          // FACE-FREE football scene via Pexels, exactly like the scene path
-          // below. We deliberately do NOT Pexels-search the person's NAME
-          // (that returns unrelated humans); a generic stadium beat is fine —
-          // the segment keeps its narration, caption and pose.
-          console.error(
-            `segment ${i}: person photo + illustration failed for "${name}" (` +
-              (e instanceof Error ? e.message : String(e)) +
-              `) — falling back to a face-free football scene`,
-          );
+        // No verified real photo. When Gemini is enabled, draw a STYLISED
+        // illustration (never a faked realistic face). When it's disabled — or
+        // on any gen failure — fall through to a FACE-FREE Pexels scene.
+        if (geminiEnabled) {
+          try {
+            const png = await Promise.race([
+              generateImage(
+                `A stylised flat-colour cartoon illustration representing ` +
+                  `footballer ${name} in kit, brand style, not photorealistic`,
+                geminiKey,
+              ),
+              sleep(SEGMENT_GEMINI_BUDGET_MS).then(() => {
+                throw new Error("person illustration timed out");
+              }),
+            ]);
+            visualDiag[i] = `gemini-stylised:${name}`;
+            return await uploadPng(png, i);
+          } catch (e) {
+            // A single unresolvable person photo must NEVER abort the whole
+            // video — this was the recurring "could not resolve a photo for
+            // <obscure player>" failure that killed entire renders.
+            console.error(
+              `segment ${i}: person illustration failed for "${name}" (` +
+                (e instanceof Error ? e.message : String(e)) +
+                `) — falling back to a face-free football scene`,
+            );
+          }
+        }
+        // Face-free Pexels fallback. Also the path when Gemini is disabled. We
+        // deliberately do NOT Pexels-search the person's NAME (that returns
+        // unrelated humans); a generic stadium beat is fine — the segment keeps
+        // its narration, caption and pose.
+        {
           const fb = pexelsKey
             ? await fetchPexelsPhoto("football soccer match stadium crowd", pexelsKey)
             : null;
@@ -1378,18 +1391,20 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
           ? `Sports news moment: ${promptFromText.slice(0, 120)}`
           : `World Cup 2026 football moment, scene ${i + 1}`);
       let png: Uint8Array | null = null;
-      try {
-        png = await Promise.race([
-          generateImage(prompt, geminiKey),
-          sleep(SEGMENT_GEMINI_BUDGET_MS).then(() => {
-            throw new Error("segment image timed out");
-          }),
-        ]);
-      } catch (imgErr) {
-        console.error(
-          `Gemini scene image failed for segment ${i} — trying Pexels:`,
-          imgErr instanceof Error ? imgErr.message : String(imgErr),
-        );
+      if (geminiEnabled) {
+        try {
+          png = await Promise.race([
+            generateImage(prompt, geminiKey),
+            sleep(SEGMENT_GEMINI_BUDGET_MS).then(() => {
+              throw new Error("segment image timed out");
+            }),
+          ]);
+        } catch (imgErr) {
+          console.error(
+            `Gemini scene image failed for segment ${i} — trying Pexels:`,
+            imgErr instanceof Error ? imgErr.message : String(imgErr),
+          );
+        }
       }
       if (png) {
         visualDiag[i] = "gemini-scene";
@@ -1428,11 +1443,13 @@ async function buildVideo(args: BuildVideoArgs): Promise<void> {
   // applied AGAIN below at the BuiltSegment mapping site so even if the
   // analyzer returns something past the first normaliser, Remotion still
   // gets only known-safe enum / hex values.
-  const visionResults = await Promise.all(
-    visualUrls.map((url) =>
-      segmentImageLimiter(() => analyzeSceneMetadata(url, geminiKey))
-    ),
-  );
+  const visionResults = geminiEnabled
+    ? await Promise.all(
+      visualUrls.map((url) =>
+        segmentImageLimiter(() => analyzeSceneMetadata(url, geminiKey))
+      ),
+    )
+    : visualUrls.map(() => ({ ...SCENE_DEFAULTS }));
 
   // The "host_voice_url" prop on the Remotion composition is now unused
   // when per-segment audio is set — each Scene plays its own MP3. We still
