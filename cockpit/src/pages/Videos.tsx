@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import { Card } from '../components/Card'
 import { Badge } from '../components/Badge'
 import { formatDistanceToNow } from 'date-fns'
+import TikTokPublishModal from '../components/TikTokPublishModal'
 
 const C = {
   gold: '#F4C20D',
@@ -472,6 +473,7 @@ function DoneCard({
 
   const [publishing, setPublishing] = useState<'youtube' | 'tiktok' | 'instagram' | null>(null)
   const [publishError, setPublishError] = useState<string | null>(null)
+  const [ttModalOpen, setTtModalOpen] = useState(false)
 
   async function publish(platform: 'youtube' | 'tiktok' | 'instagram') {
     setPublishing(platform)
@@ -499,6 +501,7 @@ function DoneCard({
   }
 
   return (
+    <>
     <Card style={{ padding: 0, overflow: 'hidden' }}>
       <div style={{
         aspectRatio: '9/16',
@@ -607,7 +610,7 @@ function DoneCard({
             publishing={publishing === 'tiktok'}
             disabled={publishing !== null || !tiktokConnected}
             disabledHint={!tiktokConnected ? 'Connect TikTok in Connections tab' : undefined}
-            onPublish={() => publish('tiktok')}
+            onPublish={() => setTtModalOpen(true)}
           />
           {/* Copy TikTok caption — the inbox/draft flow often shows
               the caption field blank in the TikTok app even when we
@@ -634,6 +637,16 @@ function DoneCard({
         </div>
       </div>
     </Card>
+    {ttModalOpen && (
+      <TikTokPublishModal
+        assetId={asset.id}
+        videoUrl={videoUrl}
+        defaultCaption={buildTikTokCaption(idea, asset)}
+        onClose={() => setTtModalOpen(false)}
+        onPublished={onPublished}
+      />
+    )}
+    </>
   )
 }
 

@@ -232,6 +232,8 @@ type PublishOpts = {
   disableComment: boolean;
   disableDuet: boolean;
   disableStitch: boolean;
+  brandContent?: boolean;
+  brandOrganic?: boolean;
 };
 
 async function publishInit(
@@ -250,6 +252,9 @@ async function publishInit(
       disable_comment: opts.disableComment,
       disable_duet: opts.disableDuet,
       disable_stitch: opts.disableStitch,
+      // Commercial-content disclosure (set from the compliant cockpit screen).
+      brand_content_toggle: opts.brandContent ?? false,
+      brand_organic_toggle: opts.brandOrganic ?? false,
     }
     : {
       // Inbox flow: lands as a private draft; the user sets final privacy +
@@ -381,7 +386,7 @@ Deno.serve(async (req: Request) => {
   const incomingSecret = req.headers.get("x-ingest-secret") ?? "";
   const isServiceCall = Boolean(ingestSecret) && incomingSecret === ingestSecret;
 
-  let body: { asset_id?: unknown; owner_id?: unknown };
+  let body: { asset_id?: unknown; owner_id?: unknown; direct?: unknown; post_info?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -586,16 +591,40 @@ Deno.serve(async (req: Request) => {
     const mp4Bytes = new Uint8Array(await mp4Res.arrayBuffer());
     console.log(`[${assetId}] mp4 fetched: ${(mp4Bytes.length / 1024 / 1024).toFixed(2)} MB`);
 
-    // 1b. Direct-post setup. DEFAULT OFF (inbox/manual). TikTok still reports
-    //     this app as UNAUDITED for direct post, so a PUBLIC direct post 403s
-    //     with "unaudited_client_can_only_post_to_private_accounts". Once the
-    //     Content Posting API AUDIT passes, set TIKTOK_DIRECT_POST=true to
-    //     auto-publish publicly (verify first with check:"direct_init"). For a
-    //     direct post we query creator_info for the allowed privacy level.
-    usedDirectPost = Deno.env.get("TIKTOK_DIRECT_POST") === "true";
+    // 1b. Direct-post setup.
+    //   - Cockpit "Publish to TikTok" sends { direct:true, post_info:{...} } from
+    //     the COMPLIANT publish screen, where the user picked caption, privacy,
+    //     interaction toggles + commercial disclosure. We honor those verbatim.
+    //   - Otherwise direct is OFF by default (inbox/manual) until the Content
+    //     Posting AUDIT passes + TIKTOK_DIRECT_POST=true (see check:"direct_init").
+    const cockpitPost = (body.post_info && typeof body.post_info === "object")
+      ? body.post_info as Record<string, unknown>
+      : null;
+    usedDirectPost = body.direct === true ||
+      Deno.env.get("TIKTOK_DIRECT_POST") === "true";
     let privacyLevel = "SELF_ONLY";
     let disableComment = false, disableDuet = false, disableStitch = false;
-    if (usedDirectPost) {
+    let brandContent = false, brandOrganic = false;
+    const effectiveTitle = (cockpitPost &&
+      typeof cockpitPost.title === "string" && cockpitPost.title.trim())
+      ? cockpitPost.title as string
+      : title;
+    if (usedDirectPost && cockpitPost) {
+      // Settings chosen by the user in the compliant cockpit screen.
+      privacyLevel = typeof cockpitPost.privacy_level === "string"
+        ? cockpitPost.privacy_level
+        : "SELF_ONLY";
+      disableComment = cockpitPost.disable_comment === true;
+      disableDuet = cockpitPost.disable_duet === true;
+      disableStitch = cockpitPost.disable_stitch === true;
+      brandContent = cockpitPost.brand_content_toggle === true;
+      brandOrganic = cockpitPost.brand_organic_toggle === true;
+      // Still need the @username to build the public URL on completion.
+      try {
+        creatorUsername = (await queryCreatorInfo(accessToken)).creator_username;
+      } catch { /* non-fatal — public URL just won't be built */ }
+    } else if (usedDirectPost) {
+      // Auto-derive (env-flag path, no cockpit settings).
       try {
         const ci = await queryCreatorInfo(accessToken);
         creatorUsername = ci.creator_username;
@@ -620,9 +649,10 @@ Deno.serve(async (req: Request) => {
     //    video is never lost (lands as a draft for manual posting).
     let init: { publish_id: string; upload_url: string };
     try {
-      init = await publishInit(accessToken, mp4Bytes.length, title, {
+      init = await publishInit(accessToken, mp4Bytes.length, effectiveTitle, {
         directPost: usedDirectPost, privacyLevel,
         disableComment, disableDuet, disableStitch,
+        brandContent, brandOrganic,
       });
     } catch (initErr) {
       if (!usedDirectPost) throw initErr;
@@ -631,7 +661,7 @@ Deno.serve(async (req: Request) => {
         initErr instanceof Error ? initErr.message : String(initErr),
       );
       usedDirectPost = false;
-      init = await publishInit(accessToken, mp4Bytes.length, title, {
+      init = await publishInit(accessToken, mp4Bytes.length, effectiveTitle, {
         directPost: false, privacyLevel: "SELF_ONLY",
         disableComment: false, disableDuet: false, disableStitch: false,
       });
