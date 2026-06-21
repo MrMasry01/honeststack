@@ -8,12 +8,12 @@
 //   1. Auth: requires user JWT. Verifies asset ownership.
 //   2. Looks up the user's social_accounts row for platform='tiktok'.
 //      Refreshes access_token if expired.
-//   3. DIRECT POST (default, audited app): queries creator_info, then
-//      POSTs /v2/post/publish/video/init/ with source FILE_UPLOAD +
-//      privacy PUBLIC_TO_EVERYONE — the video auto-publishes publicly.
-//      Set TIKTOK_DIRECT_POST=false (or on any direct failure) to fall
-//      back to /inbox/video/init/ (lands as a draft for manual posting).
-//      We upload bytes (FILE_UPLOAD) so no Portal domain verification.
+//   3. INBOX (default): POSTs /inbox/video/init/ — the video lands as a draft
+//      in the user's TikTok app for manual posting. DIRECT POST (only after
+//      the app passes TikTok's Content Posting AUDIT — set TIKTOK_DIRECT_POST
+//      =true) queries creator_info then POSTs /v2/post/publish/video/init/ with
+//      privacy PUBLIC_TO_EVERYONE to auto-publish publicly; it falls back to
+//      inbox on any error. FILE_UPLOAD either way (no Portal domain verify).
 //   4. Polls /v2/post/publish/status/fetch/ until terminal
 //      (PUBLISH_COMPLETE / SEND_TO_USER_INBOX / *_FAILED).
 //   5. Updates posts_queue (+ external_url for direct posts) + assets.media.
@@ -24,7 +24,8 @@
 //
 // Env (auto): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_ANON_KEY
 // Env (secrets): TIKTOK_CLIENT_KEY, TIKTOK_CLIENT_SECRET
-// Env (optional): TIKTOK_DIRECT_POST ("false" → inbox/manual flow; default direct)
+// Env (optional): TIKTOK_DIRECT_POST ("true" → public direct post, ONLY after the
+//                 app passes TikTok's Content Posting audit; default inbox/manual)
 // ============================================================
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -412,11 +413,15 @@ Deno.serve(async (req: Request) => {
     userId = userResp.user.id;
   }
 
-  // ---- read-only validation: { "check": "creator_info" } ------
-  // Confirms the audited app can direct-post (returns allowed privacy levels)
-  // WITHOUT posting anything. No asset needed.
-  if (typeof (body as { check?: unknown })?.check === "string" &&
-      (body as { check?: unknown }).check === "creator_info") {
+  // ---- read-only validation/diagnosis -------------------------
+  //  { "check": "creator_info" } → allowed privacy levels (no posting).
+  //  { "check": "direct_init" }  → creator_info + a DIRECT post init with a
+  //     dummy size and NO upload (nothing posts) → surfaces the exact
+  //     direct-post error that the live path swallows when it falls back.
+  const checkMode = typeof (body as { check?: unknown })?.check === "string"
+    ? (body as { check?: string }).check
+    : "";
+  if (checkMode === "creator_info" || checkMode === "direct_init") {
     const adminC = createClient(supabaseUrl, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
@@ -438,10 +443,48 @@ Deno.serve(async (req: Request) => {
         }).eq("id", acct.id);
       }
       const ci = await queryCreatorInfo(token);
-      const directDefault = Deno.env.get("TIKTOK_DIRECT_POST") !== "false";
-      return json({ ok: true, check: "creator_info", direct_post_default: directDefault, ...ci });
+      const directDefault = Deno.env.get("TIKTOK_DIRECT_POST") === "true";
+      if (checkMode === "creator_info") {
+        return json({ ok: true, check: "creator_info", direct_post_default: directDefault, ...ci });
+      }
+      // direct_init — attempt the init only (no upload → nothing is posted).
+      const privacy = ci.privacy_level_options.includes("PUBLIC_TO_EVERYONE")
+        ? "PUBLIC_TO_EVERYONE"
+        : (ci.privacy_level_options[0] ?? "SELF_ONLY");
+      const initRes = await fetch(PUBLISH_INIT_DIRECT_URL, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json; charset=UTF-8",
+        },
+        body: JSON.stringify({
+          post_info: {
+            title: "HonestStack direct-post diagnostic (not uploaded)",
+            privacy_level: privacy,
+            disable_comment: ci.comment_disabled,
+            disable_duet: ci.duet_disabled,
+            disable_stitch: ci.stitch_disabled,
+          },
+          source_info: {
+            source: "FILE_UPLOAD",
+            video_size: 5_000_000,
+            chunk_size: 5_000_000,
+            total_chunk_count: 1,
+          },
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
+      const initData = await initRes.json();
+      return json({
+        ok: initRes.ok,
+        check: "direct_init",
+        http_status: initRes.status,
+        direct_post_default: directDefault,
+        privacy_used: privacy,
+        init_response: initData,
+      });
     } catch (e) {
-      return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 200);
+      return json({ ok: false, check: checkMode, error: e instanceof Error ? e.message : String(e) }, 200);
     }
   }
 
@@ -543,11 +586,13 @@ Deno.serve(async (req: Request) => {
     const mp4Bytes = new Uint8Array(await mp4Res.arrayBuffer());
     console.log(`[${assetId}] mp4 fetched: ${(mp4Bytes.length / 1024 / 1024).toFixed(2)} MB`);
 
-    // 1b. Direct-post setup. Default ON now the app is audited; set
-    //     TIKTOK_DIRECT_POST=false to force the inbox (manual) flow. For a
-    //     direct post we MUST query creator_info first to learn the account's
-    //     allowed privacy levels + interaction settings.
-    usedDirectPost = Deno.env.get("TIKTOK_DIRECT_POST") !== "false";
+    // 1b. Direct-post setup. DEFAULT OFF (inbox/manual). TikTok still reports
+    //     this app as UNAUDITED for direct post, so a PUBLIC direct post 403s
+    //     with "unaudited_client_can_only_post_to_private_accounts". Once the
+    //     Content Posting API AUDIT passes, set TIKTOK_DIRECT_POST=true to
+    //     auto-publish publicly (verify first with check:"direct_init"). For a
+    //     direct post we query creator_info for the allowed privacy level.
+    usedDirectPost = Deno.env.get("TIKTOK_DIRECT_POST") === "true";
     let privacyLevel = "SELF_ONLY";
     let disableComment = false, disableDuet = false, disableStitch = false;
     if (usedDirectPost) {
