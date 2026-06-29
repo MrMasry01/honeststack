@@ -581,6 +581,12 @@ Deno.serve(async (req: Request) => {
           fresh_remaining: sources.length,
         });
       }
+      // Token-cost trim: cap how many candidate sources reach the model. With
+      // Twitter ingest pulling 400+/run, the full list was the dominant prompt
+      // cost. Sources are already newest-first, so this keeps the freshest
+      // window while still giving the model ample variety for the story mix.
+      const maxSources = Number(Deno.env.get("EDITORIAL_MAX_SOURCES")) || 80;
+      if (sources.length > maxSources) sources = sources.slice(0, maxSources);
       validIds = new Set(sources.map((s) => s.id));
     }
 
@@ -708,7 +714,16 @@ Deno.serve(async (req: Request) => {
         `\n\n` +
         threadsBlock +
         `The scraped football news in the LAST 8 HOURS, pre-filtered to exclude anything already covered in a recent roundup (JSON). Reference each item's "id" in brief.source_ids:\n\n` +
-        JSON.stringify(sources) +
+        // Slim each source to just what the brain uses (drop `url`, truncate
+        // long article bodies, cap media lists) — cuts input tokens further.
+        JSON.stringify(sources.map((s) => ({
+          id: s.id,
+          source_handle: s.source_handle,
+          author: s.author,
+          content: typeof s.content === "string" ? s.content.slice(0, 600) : s.content,
+          media_urls: Array.isArray(s.media_urls) ? s.media_urls.slice(0, 6) : s.media_urls,
+          verified: s.verified,
+        }))) +
         `\n\nProduce ONE roundup video for this window now. ${
           isLive
             ? `It's DAY ${tournamentDay} of the live tournament — lead with the football, never count down.`
